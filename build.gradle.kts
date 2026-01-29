@@ -24,7 +24,7 @@ tasks.withType<JavaCompile> {
 application {
     mainModule.set("com.qualengine.qualengine")
     mainClass.set("com.qualengine.qualengine.HelloApplication")
-}
+} 
 kotlin {
     jvmToolchain(21)
 }
