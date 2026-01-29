@@ -1,50 +1,38 @@
 package com.qualengine.model
 
-import java.text.BreakIterator
-import java.util.Locale
+import java.util.regex.Pattern
 
 object Atomizer {
-    fun atomize(docId: String, text: String): List<SentenceAtom>{
-        // Return empty list if no text
+
+    // Regex Explanation:
+    // (?<=[.!?])  -> Look behind for a period, exclamation, or question mark
+    // \s+         -> followed by one or more spaces/newlines
+    private val SPLIT_PATTERN = Pattern.compile("(?<=[.!?])\\s+")
+
+    fun atomize(docId: String, text: String): List<SentenceAtom> {
         if (text.isBlank()) return emptyList()
 
-        // Create iterator
-        val iterator = BreakIterator.getSentenceInstance(Locale.US)
-        iterator.setText(text)
+        // This forces a cut whenever it sees punctuation followed by space.
+        val rawSentences = text.split(SPLIT_PATTERN.toRegex())
 
-        // Create collection to hold sentences
         val atoms = mutableListOf<SentenceAtom>()
-        // Set iterator start position
-        var start = iterator.first()
-        // Set iterator end position
-        var end = iterator.last()
-        // Set tracker index variable to 0
         var orderIndex = 0
 
-        // Iterate over whole collection
-        while (end != BreakIterator.DONE) {
-            // Substring sentence
-            val sentence = text.substring(start, end).trim()
+        for (sentence in rawSentences) {
+            val cleanText = sentence.trim()
 
-            // Check if sentence is not empty and longer than 3 chars
-            if (sentence.isNotEmpty() && sentence.length > 3){
-                // Create "smart" atom that knows where it belongs
-                val atom = SentenceAtom(
-                    docId = docId,
-                    content = sentence,
-                    index = orderIndex++
+            // We ignore empty strings or things shorter than 3 chars (like "A.")
+            if (cleanText.isNotEmpty() && cleanText.length > 3) {
+                atoms.add(
+                    SentenceAtom(
+                        docId = docId,
+                        content = cleanText,
+                        index = orderIndex++
+                    )
                 )
-
-                // Add to sentence collection
-                atoms.add(atom)
             }
-
-            //Reset start to end and reset end to next
-            start = end;
-            end = iterator.next()
         }
 
-        // Return the collection of sentences
         return atoms
     }
 }
