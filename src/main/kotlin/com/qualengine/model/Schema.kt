@@ -1,4 +1,4 @@
-package com.qualengine.qualengine.model
+package com.qualengine.model
 
 import org.jetbrains.exposed.sql.Table
 
@@ -7,7 +7,7 @@ object Documents : Table() {
 
     val content = text("content")
 
-    val source = varchar("source", 255)
+    val origin = varchar("source", 255)
 
     val timestamp = long("timestamp")
 

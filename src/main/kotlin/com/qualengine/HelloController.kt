@@ -1,4 +1,4 @@
-package com.qualengine.qualengine
+package com.qualengine
 
 import javafx.fxml.FXML
 import javafx.scene.control.Label

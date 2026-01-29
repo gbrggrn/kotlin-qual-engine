@@ -1,10 +1,7 @@
 plugins {
-    java
-    application
-    id("org.jetbrains.kotlin.jvm") version "2.1.20"
-    id("org.javamodularity.moduleplugin") version "1.8.15"
+    kotlin("jvm") version "1.9.22"
+    id("application")
     id("org.openjfx.javafxplugin") version "0.0.13"
-    id("org.beryx.jlink") version "2.25.0"
 }
 
 group = "com.qualengine"
@@ -12,43 +9,38 @@ version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
+    maven("https://maven.pkg.jetbrains.space/public/p/multik/maven")
 }
 
-val junitVersion = "5.12.1"
+dependencies {
+    // --- UI ---
+    implementation("org.openjfx:javafx-controls:21")
+    implementation("org.openjfx:javafx-fxml:21")
+    implementation("org.kordamp.bootstrapfx:bootstrapfx-core:0.4.0")
 
+    // --- DATABASE (The Engine) ---
+    implementation("org.jetbrains.exposed:exposed-core:0.50.1")
+    implementation("org.jetbrains.exposed:exposed-jdbc:0.50.1")
+    implementation("org.xerial:sqlite-jdbc:3.45.1.0")
 
-tasks.withType<JavaCompile> {
-    options.encoding = "UTF-8"
+    // --- AI & MATH ---
+    implementation("com.microsoft.onnxruntime:onnxruntime:1.17.0")
+    implementation("org.jetbrains.kotlinx:multik-core:0.2.3")
+
+    // --- UTILS ---
+    implementation("org.eclipse.jgit:org.eclipse.jgit:6.9.0.202403050737-r")
 }
 
-application {
-    mainModule.set("com.qualengine.qualengine")
-    mainClass.set("com.qualengine.qualengine.HelloApplication")
-} 
 kotlin {
     jvmToolchain(21)
 }
 
+application {
+    // MAKE SURE THIS MATCHES YOUR PACKAGE
+    mainClass.set("com.qualengine.HelloApplication")
+}
+
 javafx {
-    version = "21.0.6"
-    modules = listOf("javafx.controls", "javafx.fxml")
-}
-
-dependencies {
-    implementation("org.kordamp.bootstrapfx:bootstrapfx-core:0.4.0")
-    testImplementation("org.junit.jupiter:junit-jupiter-api:${junitVersion}")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${junitVersion}")
-    implementation("org.kordamp.bootstrapfx:bootstrapfx-core:0.4.0")
-}
-
-tasks.withType<Test> {
-    useJUnitPlatform()
-}
-
-jlink {
-    imageZip.set(layout.buildDirectory.file("/distributions/app-${javafx.platform.classifier}.zip"))
-    options.set(listOf("--strip-debug", "--compress", "2", "--no-header-files", "--no-man-pages"))
-    launcher {
-        name = "app"
-    }
+    version = "21"
+    modules("javafx.controls", "javafx.fxml")
 }

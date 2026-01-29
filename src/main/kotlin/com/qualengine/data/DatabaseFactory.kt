@@ -1,4 +1,4 @@
-package com.qualengine.qualengine.data
+package com.qualengine.data
 
 class DatabaseFactory {
 }
