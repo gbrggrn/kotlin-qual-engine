@@ -29,6 +29,9 @@ dependencies {
 
     // --- UTILS ---
     implementation("org.eclipse.jgit:org.eclipse.jgit:6.9.0.202403050737-r")
+
+    // --- COROUTINES ---
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-javafx:1.7.3")
 }
 
 kotlin {

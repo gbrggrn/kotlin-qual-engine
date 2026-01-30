@@ -1,6 +1,7 @@
 package com.qualengine
 
 import com.qualengine.data.DatabaseFactory
+import com.qualengine.data.OllamaClient
 import com.qualengine.model.Atomizer
 import javafx.application.Application
 import javafx.fxml.FXMLLoader
@@ -23,6 +24,23 @@ class HelloApplication : Application() {
             println("ID: ${atom.id} | Parent: ${atom.docId} | Order: ${atom.index} | Text: ${atom.content}")
         }
         println("-----------------------")
+
+        println("--- CONTACTING OLLAMA ---")
+        // Must run asynchronously on own thread to not freeze UI...
+        val thread = Thread {
+            val testSentence = "The user interface is confusing"
+            val vector = OllamaClient.getVector(testSentence)
+
+            if (vector.isNotEmpty()){
+                println("SUCCESS! Received Vector with ${vector.size} dimensions!")
+                println("Sample: ${vector.take(5)}...")
+            } else {
+                println("FAILURE! No vector received")
+            }
+        }
+        thread.isDaemon = true
+        thread.start()
+        println("--- OLLAMA VECTORIZATION END ---")
 
         val fxmlLoader = FXMLLoader(HelloApplication::class.java.getResource("hello-view.fxml"))
         val scene = Scene(fxmlLoader.load(), 600.0, 400.0)
