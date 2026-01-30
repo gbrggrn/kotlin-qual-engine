@@ -13,6 +13,7 @@ class MainController {
 
     // Cache view
     private var refineryView: Parent? = null
+    private var explorerView: Parent? = null
 
     @FXML
     fun initialize() {
@@ -34,7 +35,11 @@ class MainController {
     fun navToExplorer() {
         updateActiveButton(btnExplorer)
 
-        contentArea.children.clear()
+        if (explorerView == null) {
+            var loader = FXMLLoader(javaClass.getResource("explorer-view.fxml"))
+            explorerView = loader.load()
+        }
+        setContent(explorerView!!)
     }
 
     private fun setContent(node: Parent) {

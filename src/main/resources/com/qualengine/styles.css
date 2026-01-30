@@ -1,0 +1,21 @@
+/* GLOBAL RESET */
+.button {
+    -fx-background-insets: 0;
+    -fx-background-radius: 4;
+    -fx-padding: 8 15 8 15; /* Fixed padding */
+    -fx-border-width: 0;
+    -fx-focus-color: transparent; /* Kills the blue glow */
+    -fx-faint-focus-color: transparent;
+}
+
+/* HOVER STATE (Only change color, not size) */
+.button:hover {
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 5, 0, 0, 1);
+}
+
+/* PRESSED STATE */
+.button:pressed {
+    -fx-effect: none;
+    -fx-translate-y: 1; /* Slight satisfying click effect */
+}

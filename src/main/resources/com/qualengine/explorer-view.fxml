@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.canvas.Canvas?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ProgressIndicator?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane prefHeight="600.0" prefWidth="800.0" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.qualengine.ExplorerController">
+
+    <top>
+        <AnchorPane prefHeight="50.0" style="-fx-background-color: #ecf0f1; -fx-border-color: #bdc3c7; -fx-border-width: 0 0 1 0;">
+            <children>
+                <Label layoutX="14.0" layoutY="15.0" style="-fx-font-weight: bold; -fx-font-size: 14;" text="Semantic Map" />
+                <Button layoutX="120.0" layoutY="10.0" mnemonicParsing="false" onAction="#onRefreshMap" text="Refresh / Recalculate" />
+            </children>
+        </AnchorPane>
+    </top>
+
+    <center>
+        <StackPane fx:id="mapContainer" style="-fx-background-color: #2c3e50;">
+            <children>
+                <Canvas fx:id="mapCanvas" height="500.0" width="700.0" />
+
+                <VBox fx:id="loadingBox" alignment="CENTER" visible="false">
+                    <children>
+                        <ProgressIndicator />
+                        <Label text="Calculating Projections..." textFill="WHITE" />
+                    </children>
+                </VBox>
+            </children>
+        </StackPane>
+    </center>
+
+    <right>
+        <VBox prefWidth="200.0" style="-fx-background-color: white; -fx-border-color: #bdc3c7; -fx-border-width: 0 0 0 1;" BorderPane.alignment="CENTER">
+            <children>
+                <Label text="Cluster Details" style="-fx-font-weight: bold; -fx-padding: 10;" />
+                <Label text="Select points on the map to view details." wrapText="true" style="-fx-padding: 10; -fx-text-fill: #7f8c8d;" />
+            </children>
+        </VBox>
+    </right>
+
+</BorderPane>

@@ -13,9 +13,9 @@ class QualEngineApp : Application() {
         DatabaseFactory.init()
 
         val fxmlLoader = FXMLLoader(QualEngineApp::class.java.getResource("main-view.fxml"))
-        val scene = Scene(fxmlLoader.load(), 600.0, 400.0)
+        val scene = Scene(fxmlLoader.load(), 1000.0, 700.0)
 
-        scene.stylesheets.add(BootstrapFX.bootstrapFXStylesheet())
+        scene.stylesheets.add(QualEngineApp::class.java.getResource("styles.css").toExternalForm())
 
         stage.title = "QualEngine"
         stage.scene = scene
