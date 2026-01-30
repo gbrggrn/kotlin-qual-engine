@@ -37,7 +37,7 @@ class QualEngineApp : Application() {
         thread.isDaemon = true
         thread.start()
 
-        val fxmlLoader = FXMLLoader(QualEngineApp::class.java.getResource("hello-view.fxml"))
+        val fxmlLoader = FXMLLoader(QualEngineApp::class.java.getResource("main-view.fxml"))
         val scene = Scene(fxmlLoader.load(), 600.0, 400.0)
 
         scene.stylesheets.add(BootstrapFX.bootstrapFXStylesheet())
