@@ -25,22 +25,18 @@ class HelloApplication : Application() {
         }
         println("-----------------------")
 
-        println("--- CONTACTING OLLAMA ---")
+        println("--- REFINERY TEST ---")
         // Must run asynchronously on own thread to not freeze UI...
-        val thread = Thread {
-            val testSentence = "The user interface is confusing"
-            val vector = OllamaClient.getVector(testSentence)
+        val dummyFile = java.io.File("test_document.txt")
+        dummyFile.writeText("The system is slow. I cannot find the login button. The interface is confusing.")
 
-            if (vector.isNotEmpty()){
-                println("SUCCESS! Received Vector with ${vector.size} dimensions!")
-                println("Sample: ${vector.take(5)}...")
-            } else {
-                println("FAILURE! No vector received")
+        val thread = Thread {
+            Refinery.ingestFile(dummyFile) { status ->
+                println("[Refinery]: $status")
             }
         }
         thread.isDaemon = true
         thread.start()
-        println("--- OLLAMA VECTORIZATION END ---")
 
         val fxmlLoader = FXMLLoader(HelloApplication::class.java.getResource("hello-view.fxml"))
         val scene = Scene(fxmlLoader.load(), 600.0, 400.0)
