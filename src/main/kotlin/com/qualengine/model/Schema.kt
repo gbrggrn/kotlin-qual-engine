@@ -23,6 +23,8 @@ object Sentences : Table() {
 
     val content = text("content")
 
+    val index = integer("index")
+
     // Blobs later??
     val vector = text("vector").nullable()
 
