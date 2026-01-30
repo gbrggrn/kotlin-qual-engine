@@ -13,24 +13,28 @@ object Refinery {
     fun ingestFile (file: File, onProgress: (Double, String) -> Unit) {
         onProgress(-1.0, "Reading file...")
 
-        // FAKE - REMEMBER: BUILD A FUNCTIONING CSV PARSER LATER!!!
+        // Read file content
+        // TODO: Upgrade to parse different file types later
         val rawText = file.readText()
         val docId = UUID.randomUUID().toString()
 
+        // Register parent document in db
         transaction {
             Documents.insert{
                 it[this.id] = docId
-                it[content] = rawText.take(100) + "..."
+                it[content] = rawText.take(100) + "..." // Keep for preview
                 it[origin] = file.name
                 it[timestamp] = System.currentTimeMillis()
             }
         }
         onProgress(-1.0, "Atomizing...")
 
+        // Atomize (split by sentence)
         val atoms = Atomizer.atomize(docId, rawText)
         val total = atoms.size
         onProgress(0.0, "Vectorizing $total sentences...")
 
+        // Add SentenceAtoms to DB
         var count = 0
         for ((index, atom) in atoms.withIndex()) {
             val vector = OllamaClient.getVector(atom.content)
