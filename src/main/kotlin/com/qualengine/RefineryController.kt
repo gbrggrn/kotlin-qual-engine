@@ -23,6 +23,7 @@ class RefineryController {
     @FXML private lateinit var colProgress: TableColumn<RefineryJob, Double>
     @FXML private lateinit var colAction: TableColumn<RefineryJob, Void>
 
+    // Lists
     private val masterList = FXCollections.observableArrayList<RefineryJob>()
     private val filteredList = FilteredList(masterList) { true }
 
@@ -41,11 +42,9 @@ class RefineryController {
                 private val btn = Button("X")
 
                 init {
-                    // Fixed CSS: added "-fx-font-" prefix to weight
                     btn.style = "-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 5;"
 
                     btn.setOnAction {
-                        // Safety check: sometimes buttons capture clicks during table updates
                         if (index >= 0 && index < tableView.items.size) {
                             val job = tableView.items[index]
                             masterList.remove(job)
