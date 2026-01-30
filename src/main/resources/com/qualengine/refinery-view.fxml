@@ -5,6 +5,7 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.AnchorPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
@@ -24,12 +25,14 @@
                             <Font name="System Bold" size="24.0" />
                         </font>
                     </Label>
-                    <Label text="Queue files for processing. Atoms will be generated automatically." textFill="#7f8c8d" />
+                    <Label text="Queue files for processing." textFill="#7f8c8d" />
                 </children>
             </VBox>
             <AnchorPane HBox.hgrow="ALWAYS" />
 
-            <Button fx:id="btnAddFile" mnemonicParsing="false" onAction="#onAddFile" style="-fx-background-color: #3498db; -fx-text-fill: white;" text="+ Add Source File">
+            <TextField fx:id="txtFilter" promptText="Filter files..." />
+
+            <Button mnemonicParsing="false" onAction="#onAddFile" style="-fx-background-color: #3498db; -fx-text-fill: white; -fx-background-insets: 0;" text="+ Add Files">
                 <font>
                     <Font name="System Bold" size="14.0" />
                 </font>
@@ -42,10 +45,11 @@
 
     <TableView fx:id="jobTable" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="ALWAYS">
         <columns>
-            <TableColumn fx:id="colStatus" prefWidth="40.0" text="" /> <TableColumn fx:id="colName" prefWidth="250.0" text="Source Name" />
-            <TableColumn fx:id="colType" prefWidth="100.0" text="Type" />
-            <TableColumn fx:id="colProgress" prefWidth="200.0" text="Progress" />
-            <TableColumn fx:id="colAction" prefWidth="100.0" text="Actions" />
+            <TableColumn fx:id="colStatus" prefWidth="120.0" text="Status" />
+            <TableColumn fx:id="colName" prefWidth="250.0" text="Source Name" />
+            <TableColumn fx:id="colType" prefWidth="75.0" text="Type" />
+            <TableColumn fx:id="colProgress" prefWidth="150.0" text="Progress" />
+            <TableColumn fx:id="colAction" prefWidth="60.0" style="-fx-alignment: CENTER;" text="Action" />
         </columns>
         <columnResizePolicy>
             <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
@@ -54,8 +58,7 @@
 
     <HBox alignment="CENTER_RIGHT" spacing="15.0">
         <children>
-            <Button fx:id="btnClear" mnemonicParsing="false" text="Clear Completed" />
-            <Button fx:id="btnProcess" mnemonicParsing="false" onAction="#onProcessQueue" style="-fx-background-color: #2ecc71; -fx-text-fill: white;" text="Start Processing">
+            <Button fx:id="btnProcess" mnemonicParsing="false" onAction="#onProcessQueue" style="-fx-background-color: #2ecc71; -fx-text-fill: white; -fx-background-insets: 0;" text="Start Processing">
                 <font>
                     <Font name="System Bold" size="14.0" />
                 </font>
