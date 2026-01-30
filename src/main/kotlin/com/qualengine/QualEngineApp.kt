@@ -12,31 +12,6 @@ class QualEngineApp : Application() {
     override fun start(stage: Stage) {
         DatabaseFactory.init()
 
-        // --- ATOMIZER TEST ---
-        val fakeDocId = "DOC-101" // Pretend we just ingested a PDF
-        val rawText = "The user interface is confusing. I couldn't find the logout button. System crashed twice."
-
-        val atoms = Atomizer.atomize(fakeDocId, rawText)
-
-        println("--- ATOMIZER REPORT ---")
-        atoms.forEach { atom ->
-            println("ID: ${atom.id} | Parent: ${atom.docId} | Order: ${atom.index} | Text: ${atom.content}")
-        }
-        println("-----------------------")
-
-        println("--- REFINERY TEST ---")
-        // Must run asynchronously on own thread to not freeze UI...
-        val dummyFile = java.io.File("test_document.txt")
-        dummyFile.writeText("The system is slow. I cannot find the login button. The interface is confusing.")
-
-        val thread = Thread {
-            Refinery.ingestFile(dummyFile) { status ->
-                println("[Refinery]: $status")
-            }
-        }
-        thread.isDaemon = true
-        thread.start()
-
         val fxmlLoader = FXMLLoader(QualEngineApp::class.java.getResource("main-view.fxml"))
         val scene = Scene(fxmlLoader.load(), 600.0, 400.0)
 
