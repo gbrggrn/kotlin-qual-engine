@@ -10,8 +10,8 @@ import java.io.File
 import java.util.UUID
 
 object Refinery {
-    fun ingestFile (file: File, onProgress: (String) -> Unit) {
-        onProgress("Reading ${file.name}")
+    fun ingestFile (file: File, onProgress: (Double, String) -> Unit) {
+        onProgress(-1.0, "Reading file...")
 
         // FAKE - REMEMBER: BUILD A FUNCTIONING CSV PARSER LATER!!!
         val rawText = file.readText()
@@ -25,13 +25,14 @@ object Refinery {
                 it[timestamp] = System.currentTimeMillis()
             }
         }
-        onProgress("Processing ${file.name}")
+        onProgress(-1.0, "Atomizing...")
 
         val atoms = Atomizer.atomize(docId, rawText)
-        onProgress("Created ${atoms.size} atoms. Starting vectorization (may take some time)...")
+        val total = atoms.size
+        onProgress(0.0, "Vectorizing $total sentences...")
 
         var count = 0
-        for (atom in atoms) {
+        for ((index, atom) in atoms.withIndex()) {
             val vector = OllamaClient.getVector(atom.content)
 
             if (vector.isNotEmpty()){
@@ -44,12 +45,12 @@ object Refinery {
                         it[Sentences.vector] = vector.joinToString(",")
                     }
                 }
-                // STATUS BAR LATER???
                 count ++
-                if (count % 5 == 0)
-                    onProgress("Processed $count / ${atoms.size}...")
+                // Calculate progress
+                val progress = (index + 1).toDouble() / total.toDouble()
+                    onProgress(progress, "Processed $count / $total...")
             }
         }
-        onProgress("Refinery finished. $count sentences stored")
+        onProgress(1.0, "Done. Stored $count sentences.")
     }
 }
