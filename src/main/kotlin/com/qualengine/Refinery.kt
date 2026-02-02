@@ -47,7 +47,7 @@ object Refinery {
 
         for ((index, molecule) in molecules.withIndex()) {
             //Chill out a bit to not completely overwhelm the app thread
-            Thread.sleep(50)
+            Thread.sleep(100)
 
             // Run "Why use many words when few do trick"-compressor on previous context
             val compressedContext = SemanticCompressor.compress(previousContext)

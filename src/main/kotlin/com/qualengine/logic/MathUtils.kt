@@ -90,41 +90,47 @@ object ClusterUtils {
 
     data class ClusterResult(
         val clusterIds: IntArray,
-        val clusterCenters: Map<Int, MathUtils.Point2D>
+        // We removed 'clusterCenters' from here because DBSCAN
+        // doesn't know about 2D screen coordinates anymore.
     )
 
     /**
-     * DBSCAN (Density-Based Spatial Clustering).
-     * @param points The 2D points from your map.
-     * @param epsilon How close points must be to touch (0.0 - 1.0). Try 0.05 to start.
-     * @param minPoints Minimum points to form a valid cluster (e.g., 3).
+     * High-Dimensional DBSCAN.
+     * Uses Cosine Distance (ideal for AI Embeddings).
+     * * @param vectors The raw 384-dimensional embeddings from the DB.
+     * @param epsilon Distance threshold (0.0 = identical, 0.2 = close, 1.0 = orthogonal).
+     * @param minPoints Minimum items to form a cluster.
      */
-    fun runDBSCAN(points: List<MathUtils.Point2D>, epsilon: Double = 0.08, minPoints: Int = 3): ClusterResult {
-        val n = points.size
-        val labels = IntArray(n) { 0 } // 0 = undefined
+    fun runDBSCAN(vectors: List<List<Double>>, epsilon: Double = 0.17, minPoints: Int = 4): ClusterResult {
+        val n = vectors.size
+        val labels = IntArray(n) { 0 } // 0 = undefined, -1 = noise, >0 = cluster
         var clusterId = 0
+
+        // Optimization: Pre-calculate vector magnitudes to speed up distance checks
+        val magnitudes = vectors.map { vec ->
+            Math.sqrt(vec.sumOf { it * it })
+        }
 
         for (i in 0 until n) {
             if (labels[i] != 0) continue // Already visited
 
-            val neighbors = getNeighbors(points, i, epsilon)
+            // Find neighbors using High-Dimensional Cosine Distance
+            val neighbors = getNeighbors(vectors, magnitudes, i, epsilon)
 
             if (neighbors.size < minPoints) {
-                labels[i] = -1 // Noise
+                labels[i] = -1 // Mark as Noise
             } else {
                 clusterId++ // Start new cluster
-                expandCluster(points, labels, i, neighbors, clusterId, epsilon, minPoints)
+                expandCluster(vectors, magnitudes, labels, i, neighbors, clusterId, epsilon, minPoints)
             }
         }
 
-        // Calculate Centers for labels later
-        val centers = calculateCentroids(points, labels)
-
-        return ClusterResult(labels, centers)
+        return ClusterResult(labels)
     }
 
     private fun expandCluster(
-        points: List<MathUtils.Point2D>,
+        vectors: List<List<Double>>,
+        magnitudes: List<Double>,
         labels: IntArray,
         pIndex: Int,
         neighbors: MutableList<Int>,
@@ -133,17 +139,22 @@ object ClusterUtils {
         minPoints: Int
     ) {
         labels[pIndex] = clusterId
+
         var i = 0
         while (i < neighbors.size) {
             val neighbor = neighbors[i]
 
+            // If it was Noise, it's now a Border Point of this cluster
             if (labels[neighbor] == -1) {
-                labels[neighbor] = clusterId // Change Noise to Border Point
+                labels[neighbor] = clusterId
             }
 
+            // If it was Undefined, process it
             if (labels[neighbor] == 0) {
                 labels[neighbor] = clusterId
-                val newNeighbors = getNeighbors(points, neighbor, epsilon)
+
+                // Check if this neighbor is also a Core Point
+                val newNeighbors = getNeighbors(vectors, magnitudes, neighbor, epsilon)
                 if (newNeighbors.size >= minPoints) {
                     neighbors.addAll(newNeighbors)
                 }
@@ -152,13 +163,22 @@ object ClusterUtils {
         }
     }
 
-    private fun getNeighbors(points: List<MathUtils.Point2D>, index: Int, eps: Double): MutableList<Int> {
+    private fun getNeighbors(
+        vectors: List<List<Double>>,
+        magnitudes: List<Double>,
+        index: Int,
+        eps: Double
+    ): MutableList<Int> {
         val neighbors = mutableListOf<Int>()
-        val p1 = points[index]
-        for (i in points.indices) {
+        val v1 = vectors[index]
+        val mag1 = magnitudes[index]
+
+        for (i in vectors.indices) {
             if (i == index) continue
-            val p2 = points[i]
-            val dist = sqrt((p1.x - p2.x).pow(2) + (p1.y - p2.y).pow(2))
+
+            // Calculate Cosine Distance
+            val dist = calculateCosineDistance(v1, mag1, vectors[i], magnitudes[i])
+
             if (dist <= eps) {
                 neighbors.add(i)
             }
@@ -166,12 +186,40 @@ object ClusterUtils {
         return neighbors
     }
 
-    private fun calculateCentroids(points: List<MathUtils.Point2D>, labels: IntArray): Map<Int, MathUtils.Point2D> {
+    /**
+     * Calculates Cosine Distance (1 - Similarity).
+     * Returns 0.0 if identical, 1.0 if orthogonal, 2.0 if opposite.
+     */
+    private fun calculateCosineDistance(v1: List<Double>, mag1: Double, v2: List<Double>, mag2: Double): Double {
+        if (mag1 == 0.0 || mag2 == 0.0) return 1.0 // Safety check
+
+        var dot = 0.0
+        // Manual loop is faster than built-in zip/sum for huge arrays
+        for (i in v1.indices) {
+            dot += v1[i] * v2[i]
+        }
+
+        val similarity = dot / (mag1 * mag2)
+
+        // Clamp to handle floating point errors (e.g. 1.0000000002)
+        val clampedSim = similarity.coerceIn(-1.0, 1.0)
+
+        return 1.0 - clampedSim
+    }
+
+    /**
+     * Calculates the visual center (Average X, Average Y) for each cluster.
+     * Call this AFTER you have projected points to 2D.
+     */
+    fun calculate2DCentroids(
+        points: List<MathUtils.Point2D>,
+        clusterIds: IntArray
+    ): Map<Int, MathUtils.Point2D> {
         val sums = mutableMapOf<Int, Pair<Double, Double>>()
         val counts = mutableMapOf<Int, Int>()
 
         for (i in points.indices) {
-            val id = labels[i]
+            val id = clusterIds[i]
             if (id == -1) continue // Ignore noise
 
             val (sumX, sumY) = sums.getOrDefault(id, 0.0 to 0.0)
@@ -186,8 +234,7 @@ object ClusterUtils {
     }
 
     fun normalizePointsForClustering(points: List<MathUtils.Point2D>): List<MathUtils.Point2D> {
-        if (points.isEmpty())
-            return points
+        if (points.isEmpty()) return points
 
         val minX = points.minOf { it.x }
         val maxX = points.maxOf { it.x }
@@ -203,6 +250,102 @@ object ClusterUtils {
                 y = (p.y - minY) / rangeY,
                 originalIndex = p.originalIndex
             )
+        }
+    }
+
+    // Add this to ClusterUtils object
+    fun assignOrphansToNearestCluster(
+        vectors: List<List<Double>>,
+        clusterIds: IntArray,
+        maxDistance: Double = 0.25
+    ) {
+        // 1. Calculate the "Average Vector" (Centroid) for each valid cluster
+        val centroids = mutableMapOf<Int, List<Double>>()
+        val counts = mutableMapOf<Int, Int>()
+
+        // Sum up vectors for each cluster
+        for (i in vectors.indices) {
+            val id = clusterIds[i]
+            if (id == -1) continue
+
+            val currentSum = centroids.getOrDefault(id, List(384) { 0.0 })
+            centroids[id] = currentSum.zip(vectors[i]) { a, b -> a + b }
+            counts[id] = counts.getOrDefault(id, 0) + 1
+        }
+
+        // Average them
+        val finalCentroids = centroids.mapValues { (id, sum) ->
+            val count = counts[id]!!
+            sum.map { it / count }
+        }
+
+        // pre-calculate magnitudes for the centroids to speed up the loop
+        val centroidMagnitudes = finalCentroids.mapValues { (_, vec) ->
+            Math.sqrt(vec.sumOf { it * it })
+        }
+        val vectorMagnitudes = vectors.map { vec -> Math.sqrt(vec.sumOf { it * it }) }
+
+        // 2. Loop through Orphans (Noise points)
+        var adoptedCount = 0
+        for (i in clusterIds.indices) {
+            if (clusterIds[i] == -1) {
+
+                // Find closest cluster
+                var bestCluster = -1
+                var bestDist = Double.MAX_VALUE
+
+                for ((id, centerVec) in finalCentroids) {
+                    val dist = calculateCosineDistance(
+                        vectors[i], vectorMagnitudes[i],
+                        centerVec, centroidMagnitudes[id]!!
+                    )
+
+                    if (dist < bestDist) {
+                        bestDist = dist
+                        bestCluster = id
+                    }
+                }
+
+                // 3. Adopt if close enough
+                if (bestCluster != -1 && bestDist <= maxDistance) {
+                    clusterIds[i] = bestCluster
+                    adoptedCount++
+                }
+            }
+        }
+        println("DEBUG: Adopted $adoptedCount orphans into clusters.")
+    }
+
+    /**
+     * Applies "Visual Gravity" to pull points closer to their cluster center.
+     * This fixes the "PCA Scattering" effect where semantic neighbors look far apart.
+     * * @param points The 2D points from PCA.
+     * @param clusterIds The semantic cluster IDs.
+     * @param centers The calculated 2D centers of those clusters.
+     * @param strength How much to pull (0.0 = none, 0.5 = halfway to center, 1.0 = collapse to single point).
+     */
+    fun applyVisualGravity(
+        points: List<MathUtils.Point2D>,
+        clusterIds: IntArray,
+        centers: Map<Int, MathUtils.Point2D>,
+        strength: Double = 0.3
+    ): List<MathUtils.Point2D> {
+
+        return points.mapIndexed { i, p ->
+            val id = clusterIds[i]
+
+            // If it's Noise (-1) or we don't have a center, leave it alone
+            if (id == -1 || !centers.containsKey(id)) {
+                return@mapIndexed p
+            }
+
+            val center = centers[id]!!
+
+            // Linear Interpolation (Lerp) towards the center
+            val newX = p.x + (center.x - p.x) * strength
+            val newY = p.y + (center.y - p.y) * strength
+
+            MathUtils.Point2D(newX, newY, p.originalIndex)
         }
     }
 }

@@ -159,29 +159,23 @@ class ExplorerController {
     @FXML
     fun onRefreshMap() {
         loadingBox.isVisible = true
+        analyzingStatusLabel.isVisible = true
+        analyzingStatusLabel.text = "Fetching data..."
 
         thread(start = true) {
-            // Fetch and parse data
+            // --- 1. DATA INGESTION ---
             val (vectors, texts) = transaction {
-                // Fetch all rows
                 val rows = Paragraphs.selectAll().toList()
 
-                // Extract Vectors: String? -> List<Double>
+                // Parse vectors
                 val v = rows.map { row ->
-                    // "!!" asserts it's not null.
-                    // Split by comma to get the numbers back
-                    row[Paragraphs.vector]!!
-                        .split(",")
-                        .map { it.toDouble() }
+                    row[Paragraphs.vector]!!.split(",").map { it.toDouble() }
                 }
-
-                // Extract Text: String
                 val t = rows.map { row -> row[Paragraphs.content] }
 
                 Pair(v, t)
             }
 
-            // Handle Empty Database
             if (vectors.isEmpty()) {
                 Platform.runLater {
                     loadingBox.isVisible = false
@@ -190,51 +184,82 @@ class ExplorerController {
                 return@thread
             }
 
-            // Perform PCA math
+            // --- 2. THE MATHEMATICS ---
+
+            // A. Clustering (High Dimensional Truth)
+            Platform.runLater { analyzingStatusLabel.text = "Clustering vectors..." }
+            val clusterResult = ClusterUtils.runDBSCAN(vectors, epsilon = 0.21, minPoints = 3)
+
+            ClusterUtils.assignOrphansToNearestCluster(vectors, clusterResult.clusterIds, maxDistance = 0.25)
+
+            // B. Projection (2D Visual Shadow)
             val rawPoints = MathUtils.performPCA(vectors)
             val normalizedPoints = ClusterUtils.normalizePointsForClustering(rawPoints)
 
-            val clusterResult = ClusterUtils.runDBSCAN(normalizedPoints, epsilon = 0.15, minPoints = 2)
-            println("DEBUG: Found ${clusterResult.clusterCenters.size} clusters.")
-            val themes = clusterResult.clusterCenters.keys.associateWith { "Analyzing..." }.toMutableMap()
+            // C. Calculate Centers
+            // High-D IDs + the 2D points to find where to put the label
+            val calculatedCenters = ClusterUtils.calculate2DCentroids(normalizedPoints, clusterResult.clusterIds)
 
-            // Draw
+            // Pull points 30% closer to their semantic home so the map looks cleaner
+            val prettyPoints = ClusterUtils.applyVisualGravity(
+                normalizedPoints,
+                clusterResult.clusterIds,
+                calculatedCenters,
+                strength = 0.35 // 0.2 = subtle, 0.5 = distinct islands
+            )
+
+            // --- 3. CONSTRUCT THE STATE ---
+            val themes = calculatedCenters.keys.associateWith { "Analyzing..." }.toMutableMap()
+
             Platform.runLater {
                 loadingBox.isVisible = false
-                explorerState.allPoints = normalizedPoints
-                explorerState.pointClusterIds = clusterResult.clusterIds
-                explorerState.clusterCenters = clusterResult.clusterCenters
+
+                val finalPoints = prettyPoints.mapIndexed { index, p ->
+                    MathUtils.Point2D(x = p.x, y = p.y, originalIndex = index)
+                }
+
+                // ASSIGN the new lists (Parallel Arrays Pattern)
+                explorerState.allPoints = finalPoints
+                explorerState.pointClusterIds = clusterResult.clusterIds // Colors live here
+                explorerState.pointContents = texts // Text lives here
+
+                // Map Metadata
+                explorerState.clusterCenters = calculatedCenters
                 explorerState.clusterThemes = themes
-                explorerState.pointContents = texts
                 explorerState.width = mapCanvas.width
                 explorerState.height = mapCanvas.height
 
+                // Render
                 renderer.render(explorerState)
             }
 
-            val totalClusters = clusterResult.clusterCenters.size
+            // --- 4. THE AI ENRICHMENT LOOP ---
+            val totalClusters = calculatedCenters.size
             var processed = 0
 
-            // AI-labeling! Runs on same thread in the background, updating the UI progressively
-            for (clusterId in clusterResult.clusterCenters.keys) {
-                // Find the texts of this cluster
-                val clusterTexts = normalizedPoints.indices
-                    .filter { clusterResult.clusterIds[it] == clusterId }
-                    .map { texts[it] }
+            for (clusterId in calculatedCenters.keys) {
+                // Find text snippets belonging to this cluster
+                val clusterSnippets = vectors.indices
+                    .filter { i -> clusterResult.clusterIds[i] == clusterId }
+                    .map { i -> texts[i] }
 
-                // Prompt llm to summarize
-                val smartLabel = OllamaEnricher.summarizeCluster(clusterTexts)
+                // Summarize
+                val smartLabel = OllamaEnricher.summarizeCluster(clusterSnippets)
 
-                // Live update the UI
+                // Update Map
                 themes[clusterId] = smartLabel
+                processed++
+
                 Platform.runLater {
                     explorerState.clusterThemes = themes
-                    analyzingStatusLabel.text = "Identifying theme ${processed + 1} / $totalClusters"
+                    analyzingStatusLabel.text = "Identified Theme $processed / $totalClusters"
                     renderer.render(explorerState)
                 }
-                processed++
             }
-            Platform.runLater { analyzingStatusLabel.text = "Theme analysis complete." }
+
+            Platform.runLater {
+                analyzingStatusLabel.text = "Analysis Complete."
+            }
         }
     }
 

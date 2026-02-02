@@ -113,7 +113,7 @@ class InputPipeline(private val state: ExplorerState) {
     fun handleClick(event: MouseEvent) {
         if (state.isDragging)
             return
-        
+
         // Only handle click if real drag
         if (!isRealDrag) {
             // If hovering - toggle selection

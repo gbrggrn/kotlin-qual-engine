@@ -34,8 +34,8 @@ class CanvasRenderer(private val canvas: Canvas){
         )
 
         for ((index, point) in state.allPoints.withIndex()) {
-            val screenX = point.x * (width - padding * 2) + padding
-            val screenY = point.y * (height - padding * 2) + padding
+            val screenX = ((point.x - minX) / rangeX) * (width - padding * 2) + padding
+            val screenY = ((point.y - minY) / rangeY) * (height - padding * 2) + padding
 
             when {
                 // Hovered point = yellow
