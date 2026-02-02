@@ -1,15 +1,18 @@
 package com.qualengine
 
 import com.qualengine.data.OllamaClient
-import com.qualengine.model.Atomizer
+import com.qualengine.data.OllamaEnricher
+import com.qualengine.logic.SemanticCompressor
 import com.qualengine.model.Documents
-import com.qualengine.model.Sentences
+import com.qualengine.model.Moleculizer
+import com.qualengine.model.Paragraphs
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.File
 import java.util.UUID
 
 object Refinery {
+
     fun ingestFile (file: File, onProgress: (Double, String) -> Unit) {
         onProgress(-1.0, "Reading file...")
 
@@ -27,34 +30,58 @@ object Refinery {
                 it[timestamp] = System.currentTimeMillis()
             }
         }
-        onProgress(-1.0, "Atomizing...")
+        onProgress(-1.0, "Moleculizing...")
 
-        // Atomize (split by sentence)
-        val atoms = Atomizer.atomize(docId, rawText)
-        val total = atoms.size
-        onProgress(0.0, "Vectorizing $total sentences...")
+        // Moleculize (split by paragraph)
+        val molecules = Moleculizer.moleculize(docId, rawText)
+        val total = molecules.size
+        onProgress(0.0, "Enriching & Vectorizing $total paragraphs...")
 
-        // Add SentenceAtoms to DB
-        var count = 0
-        for ((index, atom) in atoms.withIndex()) {
-            val vector = OllamaClient.getVector(atom.content)
+        // Context "memory" cache
+        var previousContext = ""
+
+        // Enrich/vectorize loop
+        var count = 0 // Count to display number of paragraphs processed
+
+        var lastReportedProgress = 0.0
+
+        for ((index, molecule) in molecules.withIndex()) {
+            //Chill out a bit to not completely overwhelm the app thread
+            Thread.sleep(50)
+
+            // Run "Why use many words when few do trick"-compressor on previous context
+            val compressedContext = SemanticCompressor.compress(previousContext)
+
+            // Send text to enricher for semantic summarization
+            val enrichedText = OllamaEnricher.enrichParagraph(molecule.content, previousContext)
+
+            // Update "memory" cache
+            previousContext = enrichedText
+
+            // Vectorize the semantic summarization
+            val vector = OllamaClient.getVector(enrichedText)
 
             if (vector.isNotEmpty()){
                 transaction {
-                    Sentences.insert {
-                        it[Sentences.id] = atom.id
-                        it[Sentences.docId] = atom.docId
-                        it[Sentences.content] = atom.content
-                        it[Sentences.index] = atom.index
-                        it[Sentences.vector] = vector.joinToString(",")
+                    Paragraphs.insert {
+                        it[Paragraphs.id] = molecule.id
+                        it[Paragraphs.docId] = molecule.docId
+                        it[Paragraphs.content] = molecule.content
+                        it[Paragraphs.index] = molecule.index
+                        it[Paragraphs.vector] = vector.joinToString(",")
                     }
                 }
                 count ++
                 // Calculate progress
-                val progress = (index + 1).toDouble() / total.toDouble()
-                    onProgress(progress, "Processed $count / $total...")
+                val currentProgress = (index + 1).toDouble() / total.toDouble()
+                val diff = currentProgress - lastReportedProgress
+
+                if (diff > 0.01 || index == total -1) {
+                    onProgress(currentProgress, "Processed $count / $total")
+                    lastReportedProgress = currentProgress
+                }
             }
         }
-        onProgress(1.0, "Done. Stored $count sentences.")
+        onProgress(1.0, "Done. Stored $count smart paragraph molecules...")
     }
 }

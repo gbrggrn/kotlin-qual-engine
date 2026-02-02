@@ -1,9 +1,11 @@
 package com.qualengine
 
+import com.qualengine.data.OllamaEnricher
+import com.qualengine.logic.ClusterUtils
 import com.qualengine.logic.MathUtils
 import com.qualengine.logic.InputPipeline
 import com.qualengine.model.ExplorerState
-import com.qualengine.model.Sentences
+import com.qualengine.model.Paragraphs
 import javafx.application.Platform
 import javafx.fxml.FXML
 import javafx.scene.canvas.Canvas
@@ -15,7 +17,6 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import javafx.scene.control.Label
 import javafx.scene.control.TextArea
 import kotlin.concurrent.thread
-import kotlin.math.exp
 
 class ExplorerController {
     // UI variables
@@ -64,7 +65,7 @@ class ExplorerController {
 
         // Set mouse events
         mapCanvas.setOnMouseMoved { event ->
-            pipeline.handleMove(event)
+            pipeline.handleMouseMove(event)
             renderer.render(explorerState)
         }
         mapCanvas.setOnMousePressed { event ->
@@ -86,9 +87,9 @@ class ExplorerController {
         }
     }
 
-    private fun renderAtoms(points: List<MathUtils.Point2D>, texts: List<String>) {
-        explorerState.renderedAtoms = points
-        explorerState.atomsContents = texts
+    private fun renderPoints(points: List<MathUtils.Point2D>, texts: List<String>) {
+        explorerState.allPoints = points
+        explorerState.moleculeContents = texts
         explorerState.width = mapCanvas.width
         explorerState.height = mapCanvas.height
 
@@ -98,7 +99,7 @@ class ExplorerController {
     private fun updateSidePanel() {
         detailsBox.children.clear()
 
-        if (explorerState.selectedAtoms.isEmpty()){
+        if (explorerState.selectedPoint.isEmpty()){
             val placeholder = Label("Select dots on the map to view details.")
             placeholder.isWrapText = true
             placeholder.style = "-fx-text-fill: #7f8c8d; -fx-font-style: italic;"
@@ -106,10 +107,10 @@ class ExplorerController {
             return
         }
 
-        val selectedSubset = explorerState.selectedAtoms.take(numberOfDetailsFor)
+        val selectedSubset = explorerState.selectedPoint.take(numberOfDetailsFor)
 
         for (atom in selectedSubset) {
-            val content = explorerState.atomsContents.getOrNull(atom.originalIndex) ?: "Unknown"
+            val content = explorerState.moleculeContents.getOrNull(atom.originalIndex) ?: "Unknown"
 
             val textArea = TextArea(content)
 
@@ -126,8 +127,8 @@ class ExplorerController {
             detailsBox.children.add(textArea)
         }
 
-        if (explorerState.selectedAtoms.size > 50){
-            val warning = Label("... and ${explorerState.selectedAtoms.size - 50} more items.")
+        if (explorerState.selectedPoint.size > 50){
+            val warning = Label("... and ${explorerState.selectedPoint.size - 50} more items.")
             warning.style = "-fx-text-fill: #e74c3c; -fx-font-weight: bold;"
             detailsBox.children.add(warning)
         }
@@ -138,29 +139,73 @@ class ExplorerController {
         loadingBox.isVisible = true
 
         thread(start = true) {
-            // 1. Fetch Data
+            // Fetch and parse data
             val (vectors, texts) = transaction {
-                val rows = Sentences.selectAll().limit(2000) // Cap for performance
+                // Fetch all rows
+                val rows = Paragraphs.selectAll().toList()
+
+                // Extract Vectors: String? -> List<Double>
                 val v = rows.map { row ->
-                    // Parse string "0.1,0.2..." back to List<Double>
-                    row[Sentences.vector]!!.split(",").map { it.toDouble() }
+                    // "!!" asserts it's not null.
+                    // Split by comma to get the numbers back
+                    row[Paragraphs.vector]!!
+                        .split(",")
+                        .map { it.toDouble() }
                 }
-                val t = rows.map { it[Sentences.content] }
+
+                // Extract Text: String
+                val t = rows.map { row -> row[Paragraphs.content] }
+
                 Pair(v, t)
             }
 
+            // Handle Empty Database
             if (vectors.isEmpty()) {
-                Platform.runLater { loadingBox.isVisible = false }
+                Platform.runLater {
+                    loadingBox.isVisible = false
+                    // TODO: SHOW NO DATABASE FOUND
+                }
                 return@thread
             }
 
-            // 2. Run Math (Heavy CPU)
-            val atoms = MathUtils.performPCA(vectors)
+            // Perform PCA math
+            val rawPoints = MathUtils.performPCA(vectors)
+            val normalizedPoints = ClusterUtils.normalizePointsForClustering(rawPoints)
 
-            // 3. Draw
+            val clusterResult = ClusterUtils.runDBSCAN(normalizedPoints, epsilon = 0.15, minPoints = 2)
+            println("DEBUG: Found ${clusterResult.clusterCenters.size} clusters.")
+            val themes = clusterResult.clusterCenters.keys.associateWith { "Analyzing..." }.toMutableMap()
+
+            // Draw
             Platform.runLater {
                 loadingBox.isVisible = false
-                renderAtoms(atoms, texts)
+                explorerState.allPoints = normalizedPoints
+                explorerState.pointClusterIds = clusterResult.clusterIds
+                explorerState.clusterCenters = clusterResult.clusterCenters
+                explorerState.clusterThemes = themes
+                explorerState.moleculeContents = texts
+                explorerState.width = mapCanvas.width
+                explorerState.height = mapCanvas.height
+
+                renderer.render(explorerState)
+            }
+
+            // AI-labeling! Runs on same thread in the background, updating the UI progressively
+            for (clusterId in clusterResult.clusterCenters.keys) {
+                // Find the texts of this cluster
+                val clusterTexts = normalizedPoints.indices
+                    .filter { clusterResult.clusterIds[it] == clusterId }
+                    .map { texts[it] }
+
+                // Prompt llm to summarize
+                val smartLabel = OllamaEnricher.summarizeCluster(clusterTexts)
+
+                // Live update the UI
+                themes[clusterId] = smartLabel
+                Platform.runLater {
+                    explorerState.clusterThemes = themes
+                    renderer.render(explorerState)
+                }
             }
         }
     }

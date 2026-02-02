@@ -1,21 +1,19 @@
 package com.qualengine.model
 
 import com.qualengine.logic.MathUtils.Point2D
-import com.qualengine.model.Documents.integer
-import java.awt.Rectangle
 
 class ExplorerState {
     // Atoms data
-    var renderedAtoms: List<Point2D> = emptyList()
-    var atomsContents: List<String> = emptyList()
+    var allPoints: List<Point2D> = emptyList()
+    var moleculeContents: List<String> = emptyList()
 
     // Viewport
     var width: Double = 0.0
     var height: Double = 0.0
 
     // Interaction
-    var hoveredAtom: Point2D? = null
-    var selectedAtoms = mutableSetOf<Point2D>()
+    var hoveredPoint: Point2D? = null
+    var selectedPoint = mutableSetOf<Point2D>()
 
     //Marquee selection
     var isDragging: Boolean = false
@@ -23,6 +21,11 @@ class ExplorerState {
     var dragStartY: Double = 0.0
     var dragCurrentX: Double = 0.0
     var dragCurrentY: Double = 0.0
+
+    // Clustering data
+    var pointClusterIds: IntArray = IntArray(0)
+    var clusterCenters: Map<Int, Point2D> = emptyMap()
+    var clusterThemes: MutableMap<Int, String> = mutableMapOf()
 
     // Clear transient state
     fun getSelectionBounds(): Bounds? {

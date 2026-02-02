@@ -30,3 +30,19 @@ object Sentences : Table() {
 
     override val primaryKey = PrimaryKey(id)
 }
+
+object Paragraphs : Table() {
+    val id = varchar("id", 50)
+
+    // Foreign key Document.id
+    val docId = reference("doc_id", Documents.id)
+
+    val content = text("content")
+
+    val index = integer("index")
+
+    // Blobs later??
+    val vector = text("vector").nullable()
+
+    override val primaryKey = PrimaryKey(id)
+}

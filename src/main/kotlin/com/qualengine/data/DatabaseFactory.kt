@@ -2,6 +2,7 @@ package com.qualengine.data
 
 import com.qualengine.model.Documents
 import com.qualengine.model.Sentences
+import com.qualengine.model.Paragraphs
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -16,7 +17,7 @@ object DatabaseFactory {
 
         transaction{
             // Check tables exist - otherwise CREATE
-            SchemaUtils.create(Documents, Sentences)
+            SchemaUtils.create(Documents, Sentences, Paragraphs)
         }
 
         println("Refinery Storage: ONLINE [$dbFile.absolutePath]")

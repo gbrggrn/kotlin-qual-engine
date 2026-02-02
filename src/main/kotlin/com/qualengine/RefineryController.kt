@@ -101,33 +101,57 @@ class RefineryController {
 
     @FXML
     fun onProcessQueue() {
-        if (masterList.isEmpty())
-            return
+        if (masterList.isEmpty()) return
 
         btnProcess.isDisable = true
 
-        thread (start = true, isDaemon = true) {
-            for (job in masterList) {
-                if (job.statusProperty.get() == "Completed")
-                    continue
+        // Create a fixed copy of the list.
+        // This prevents "ConcurrentModificationException" if the UI updates while processing.
+        val queueSnapshot = ArrayList(masterList)
+
+        thread(start = true, isDaemon = true) {
+            for (job in queueSnapshot) {
+
+                // Check status on snapshot, but verify with current state if needed
+                if (job.statusProperty.get() == "Completed") continue
 
                 Platform.runLater { job.setStatus("Starting...") }
 
                 try {
+                    // Heavy lifting upcoming
                     Refinery.ingestFile(job.file) { progress, status ->
+
+                        // TODO: Throttle UI updates?
+                        // If this runs 1000 times/sec, it can freeze the UI.
+                        // For paragraphs (1 per sec), standard runLater is fine.
                         Platform.runLater {
                             job.setStatus(status)
                             job.setProgress(progress)
                         }
                     }
-                } catch (e: Exception) {
+
+                    // Success State
                     Platform.runLater {
-                        job.setStatus("Error")
+                        job.setStatus("Completed")
+                        job.setProgress(1.0)
+                    }
+
+                } catch (t: Throwable) { // CATCH EVERYTHING (Errors + Exceptions)
+
+                    val errorMessage = when(t) {
+                        is OutOfMemoryError -> "OOM Error (Restart App)"
+                        else -> "Error: ${t.message?.take(20) ?: "Unknown"}"
+                    }
+
+                    Platform.runLater {
+                        job.setStatus(errorMessage)
                         job.setProgress(0.0)
                     }
-                    e.printStackTrace()
+                    System.err.println("CRITICAL FAILURE on job ${job.file.name}:")
+                    t.printStackTrace()
                 }
             }
+
             Platform.runLater { btnProcess.isDisable = false }
         }
     }

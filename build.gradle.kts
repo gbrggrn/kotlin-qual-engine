@@ -32,6 +32,9 @@ dependencies {
 
     // --- COROUTINES ---
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-javafx:1.7.3")
+
+    // --- JSON ---
+    implementation("org.json:json:20240303")
 }
 
 kotlin {

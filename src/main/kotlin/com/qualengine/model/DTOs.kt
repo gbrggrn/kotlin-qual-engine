@@ -8,3 +8,10 @@ data class SentenceAtom(
     val content: String,
     val index: Int
 )
+
+data class ParagraphMolecule (
+    val id: String = UUID.randomUUID().toString(),
+    val docId: String,
+    val content: String,
+    val index: Int
+)
