@@ -25,6 +25,9 @@ class ExplorerController {
     private lateinit var renderer: CanvasRenderer
     private lateinit var pipeline: InputPipeline
 
+    // Cache points so we can redraw on resize without recalculating PCA
+    private var currentPoints: List<MathUtils.Point2D> = emptyList()
+
     @FXML
     fun initialize() {
         // Initialize logic classes to handle mouse events
@@ -51,7 +54,7 @@ class ExplorerController {
             explorerState.height = newW.toDouble(); renderer.render(explorerState)
         }
 
-        // Wire the InputPipeline chain
+        // Set mouse events
         mapCanvas.setOnMouseMoved { event ->
             pipeline.handleMove(event)
             renderer.render(explorerState)
@@ -61,6 +64,15 @@ class ExplorerController {
             pipeline.handleClick(event)
             renderer.render(explorerState)
         }
+    }
+
+    private fun renderPoints(points: List<MathUtils.Point2D>) {
+        explorerState.renderedAtoms = points
+
+        explorerState.width = mapCanvas.width
+        explorerState.height = mapCanvas.height
+
+        renderer.render(explorerState)
     }
 
     @FXML
@@ -93,14 +105,6 @@ class ExplorerController {
                 renderPoints(points)
             }
         }
-    }
-
-    // Cache points so we can redraw on resize without recalculating PCA
-    private var currentPoints: List<MathUtils.Point2D> = emptyList()
-
-    private fun renderPoints(points: List<MathUtils.Point2D>) {
-        currentPoints = points
-        drawMap()
     }
 
     private fun drawMap() {
