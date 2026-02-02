@@ -7,26 +7,36 @@ import java.awt.Rectangle
 class ExplorerState {
     // Atoms data
     var renderedAtoms: List<Point2D> = emptyList()
+    var atomsContents: List<String> = emptyList()
 
-    // Interaction state
-    var mouseX: Double = 0.0
-    var mouseY: Double = 0.0
-
+    // Viewport
     var width: Double = 0.0
     var height: Double = 0.0
 
+    // Interaction
     var hoveredAtom: Point2D? = null
     var selectedAtoms = mutableSetOf<Point2D>()
 
-    // Viewport
-    var zoomLevel: Double = 0.0
-    var panOffSetX: Double = 0.0
-    var panOffSetY: Double = 0.0
+    //Marquee selection
+    var isDragging: Boolean = false
+    var dragStartX: Double = 0.0
+    var dragStartY: Double = 0.0
+    var dragCurrentX: Double = 0.0
+    var dragCurrentY: Double = 0.0
 
     // Clear transient state
-    fun clearSelection() {
-        selectedAtoms.clear()
-        hoveredAtom = null
+    fun getSelectionBounds(): Bounds? {
+        if (!isDragging)
+            return null
+
+        val minX = kotlin.math.min(dragStartX, dragCurrentX)
+        val minY = kotlin.math.min(dragStartY, dragCurrentY)
+        val w = kotlin.math.abs(dragCurrentX - dragStartX)
+        val h = kotlin.math.abs(dragCurrentY - dragStartY)
+
+        return Bounds(minX, minY, w, h)
     }
+
+    data class Bounds(val x: Double, val y: Double, val w: Double, val h: Double)
 }
 

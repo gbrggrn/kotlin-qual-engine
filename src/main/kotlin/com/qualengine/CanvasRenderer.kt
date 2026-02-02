@@ -49,5 +49,14 @@ class CanvasRenderer(private val canvas: Canvas){
                 }
             }
         }
+        // Draw box selection (multiples)
+        state.getSelectionBounds()?.let { box ->
+            graphics.stroke = Color.CYAN
+            graphics.lineWidth = 1.0
+
+            graphics.fill = Color.rgb(0, 255, 255, 0.2)
+            graphics.fillRect(box.x, box.y, box.w, box.h)
+            graphics.strokeRect(box.x, box.y, box.w, box.h)
+        }
     }
 }
