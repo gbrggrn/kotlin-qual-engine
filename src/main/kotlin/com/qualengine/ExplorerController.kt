@@ -26,7 +26,7 @@ class ExplorerController {
     private lateinit var pipeline: InputPipeline
 
     // Cache points so we can redraw on resize without recalculating PCA
-    private var currentPoints: List<MathUtils.Point2D> = emptyList()
+    private var currentAtoms: List<MathUtils.Point2D> = emptyList()
 
     @FXML
     fun initialize() {
@@ -66,7 +66,7 @@ class ExplorerController {
         }
     }
 
-    private fun renderPoints(points: List<MathUtils.Point2D>) {
+    private fun renderAtoms(points: List<MathUtils.Point2D>) {
         explorerState.renderedAtoms = points
 
         explorerState.width = mapCanvas.width
@@ -97,18 +97,18 @@ class ExplorerController {
             }
 
             // 2. Run Math (Heavy CPU)
-            val points = MathUtils.performPCA(vectors)
+            val atoms = MathUtils.performPCA(vectors)
 
             // 3. Draw
             Platform.runLater {
                 loadingBox.isVisible = false
-                renderPoints(points)
+                renderAtoms(atoms)
             }
         }
     }
 
     private fun drawMap() {
-        if (currentPoints.isEmpty()) return
+        if (currentAtoms.isEmpty()) return
 
         val gc = mapCanvas.graphicsContext2D
         val w = mapCanvas.width
@@ -119,14 +119,14 @@ class ExplorerController {
         gc.fillRect(0.0, 0.0, w, h)
 
         // Find Bounds to normalize to screen size
-        val minX = currentPoints.minOf { it.x }
-        val maxX = currentPoints.maxOf { it.x }
-        val minY = currentPoints.minOf { it.y }
-        val maxY = currentPoints.maxOf { it.y }
+        val minX = currentAtoms.minOf { it.x }
+        val maxX = currentAtoms.maxOf { it.x }
+        val minY = currentAtoms.minOf { it.y }
+        val maxY = currentAtoms.maxOf { it.y }
 
         // Draw Dots
         gc.fill = Color.CYAN
-        for (p in currentPoints) {
+        for (p in currentAtoms) {
             // Map Math-Coordinates to Screen-Coordinates
             val screenX = ((p.x - minX) / (maxX - minX)) * (w - 40) + 20
             val screenY = ((p.y - minY) / (maxY - minY)) * (h - 40) + 20
