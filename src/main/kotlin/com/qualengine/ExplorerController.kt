@@ -12,7 +12,10 @@ import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import javafx.scene.control.Label
+import javafx.scene.control.TextArea
 import kotlin.concurrent.thread
+import kotlin.math.exp
 
 class ExplorerController {
     // UI variables
@@ -24,6 +27,11 @@ class ExplorerController {
     private val explorerState = ExplorerState()
     private lateinit var renderer: CanvasRenderer
     private lateinit var pipeline: InputPipeline
+
+    // Details side view variables
+    @FXML private lateinit var detailsBox: VBox
+    @FXML private lateinit var txtContext: TextArea
+    private val numberOfDetailsFor = 50
 
     // Cache points so we can redraw on resize without recalculating PCA
     private var currentAtoms: List<MathUtils.Point2D> = emptyList()
@@ -46,7 +54,7 @@ class ExplorerController {
         mapCanvas.widthProperty().bind(mapContainer.widthProperty())
         mapCanvas.heightProperty().bind(mapContainer.heightProperty())
 
-        // Resize listener -> update state -> redraw
+        // Mouse listeners
         mapCanvas.widthProperty().addListener { _, _, newW->
             explorerState.width = newW.toDouble(); renderer.render(explorerState)
         }
@@ -59,20 +67,70 @@ class ExplorerController {
             pipeline.handleMove(event)
             renderer.render(explorerState)
         }
-
+        mapCanvas.setOnMousePressed { event ->
+            pipeline.handleMousePressed(event)
+            renderer.render(explorerState)
+        }
+        mapCanvas.setOnMouseDragged { event ->
+            pipeline.handleMouseDragged(event)
+            renderer.render(explorerState)
+        }
+        mapCanvas.setOnMouseReleased { event ->
+            pipeline.handleMouseReleased(event)
+            renderer.render(explorerState)
+            updateSidePanel()
+        }
         mapCanvas.setOnMouseClicked { event ->
             pipeline.handleClick(event)
-            renderer.render(explorerState)
+            updateSidePanel()
         }
     }
 
-    private fun renderAtoms(points: List<MathUtils.Point2D>) {
+    private fun renderAtoms(points: List<MathUtils.Point2D>, texts: List<String>) {
         explorerState.renderedAtoms = points
-
+        explorerState.atomsContents = texts
         explorerState.width = mapCanvas.width
         explorerState.height = mapCanvas.height
 
         renderer.render(explorerState)
+    }
+
+    private fun updateSidePanel() {
+        detailsBox.children.clear()
+
+        if (explorerState.selectedAtoms.isEmpty()){
+            val placeholder = Label("Select dots on the map to view details.")
+            placeholder.isWrapText = true
+            placeholder.style = "-fx-text-fill: #7f8c8d; -fx-font-style: italic;"
+            detailsBox.children.add(placeholder)
+            return
+        }
+
+        val selectedSubset = explorerState.selectedAtoms.take(numberOfDetailsFor)
+
+        for (atom in selectedSubset) {
+            val content = explorerState.atomsContents.getOrNull(atom.originalIndex) ?: "Unknown"
+
+            val textArea = TextArea(content)
+
+            textArea.isEditable = false
+            textArea.isWrapText = true
+            textArea.prefRowCount = 3
+            textArea.style = """
+                -fx-background-color: white;
+                -fx-border-color: #bdc3c7;
+                -fx-border-radius: 4;
+                -fx-background-radius: 4;
+                """.trimIndent()
+
+            detailsBox.children.add(textArea)
+        }
+
+        if (explorerState.selectedAtoms.size > 50){
+            val warning = Label("... and ${explorerState.selectedAtoms.size - 50} more items.")
+            warning.style = "-fx-text-fill: #e74c3c; -fx-font-weight: bold;"
+            detailsBox.children.add(warning)
+        }
     }
 
     @FXML
@@ -102,7 +160,7 @@ class ExplorerController {
             // 3. Draw
             Platform.runLater {
                 loadingBox.isVisible = false
-                renderAtoms(atoms)
+                renderAtoms(atoms, texts)
             }
         }
     }

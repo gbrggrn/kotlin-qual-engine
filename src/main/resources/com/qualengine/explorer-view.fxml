@@ -9,6 +9,7 @@
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 
+<?import javafx.scene.control.ScrollPane?>
 <BorderPane prefHeight="600.0" prefWidth="800.0" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.qualengine.ExplorerController">
 
     <top>
@@ -36,12 +37,13 @@
     </center>
 
     <right>
-        <VBox prefWidth="200.0" style="-fx-background-color: white; -fx-border-color: #bdc3c7; -fx-border-width: 0 0 0 1;" BorderPane.alignment="CENTER">
-            <children>
-                <Label text="Cluster Details" style="-fx-font-weight: bold; -fx-padding: 10;" />
-                <Label text="Select points on the map to view details." wrapText="true" style="-fx-padding: 10; -fx-text-fill: #7f8c8d;" />
-            </children>
-        </VBox>
+        <ScrollPane fitToWidth="true" hbarPolicy="NEVER" prefWidth="250" style="-fx-background-color: transparent;">
+            <content>
+                <VBox fx:id="detailsBox" spacing="10.0" style="-fx-padding: 10;">
+
+                </VBox>
+            </content>
+        </ScrollPane>
     </right>
 
 </BorderPane>
