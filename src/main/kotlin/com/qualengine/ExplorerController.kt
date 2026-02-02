@@ -1,6 +1,8 @@
 package com.qualengine
 
 import com.qualengine.logic.MathUtils
+import com.qualengine.logic.InputPipeline
+import com.qualengine.model.ExplorerState
 import com.qualengine.model.Sentences
 import javafx.application.Platform
 import javafx.fxml.FXML
@@ -13,10 +15,17 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import kotlin.concurrent.thread
 
 class ExplorerController {
-
+    // UI variables
     @FXML private lateinit var mapContainer: StackPane
     @FXML private lateinit var mapCanvas: Canvas
     @FXML private lateinit var loadingBox: VBox
+
+    // This controller owns the explorer state
+    private val explorerState = ExplorerState()
+
+    // This controller owns the mouse event workers for the canvas
+    private val renderer = CanvasRenderer(mapCanvas)
+    private val inputPipeline = InputPipeline(explorerState)
 
     @FXML
     fun initialize() {
@@ -27,6 +36,13 @@ class ExplorerController {
         // Redraw when window resizes
         mapCanvas.widthProperty().addListener { _ -> drawMap() }
         mapCanvas.heightProperty().addListener { _ -> drawMap() }
+
+        // Wire the InputPipeline chain
+        mapCanvas.setOnMouseMoved { event ->
+            inputPipeline.handleMove(event)
+
+            renderer.render(state)
+        }
     }
 
     @FXML
