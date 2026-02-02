@@ -139,7 +139,10 @@ object OllamaEnricher {
             if (responseJson.has("response")) {
                 var text = responseJson.getString("response").trim()
                 // Cleanup
-                text = text.removePrefix("Title:").removePrefix("Label:").trim()
+                text = text
+                    .removePrefix("Title:")
+                    .removePrefix("Label:")
+                    .removePrefix("-").trim()
                 text.removeSurrounding("\"")
             } else {
                 "Cluster"

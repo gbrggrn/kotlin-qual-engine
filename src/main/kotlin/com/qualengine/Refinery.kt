@@ -71,6 +71,12 @@ object Refinery {
                         it[Paragraphs.vector] = vector.joinToString(",")
                     }
                 }
+
+                // Nudge the garbage collector every few loops
+                if (index % 50 == 0) {
+                    System.gc()
+                }
+
                 count ++
                 // Calculate progress
                 val currentProgress = (index + 1).toDouble() / total.toDouble()

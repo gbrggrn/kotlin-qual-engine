@@ -3,11 +3,14 @@ package com.qualengine.logic
 import com.qualengine.model.ExplorerState
 import com.qualengine.logic.MathUtils.Point2D
 import javafx.scene.input.MouseEvent
+import kotlin.math.hypot
 import kotlin.math.pow
 import kotlin.math.sqrt
 
 class InputPipeline(private val state: ExplorerState) {
     private val PADDING = 40.0
+    private val DRAG_THRESHOLD = 5.0
+    private var isRealDrag = false
 
     fun handleMousePressed(event: MouseEvent){
         state.isDragging = true
@@ -16,8 +19,10 @@ class InputPipeline(private val state: ExplorerState) {
         state.dragCurrentX = event.x
         state.dragCurrentY = event.y
 
-        // Clear selection UNLESS holding shift
-        if (!event.isShiftDown){
+        isRealDrag = false
+
+        // Clear selection UNLESS holding shift/control
+        if (!event.isShiftDown && !event.isShortcutDown){
             state.selectedPoint.clear()
         }
     }
@@ -28,6 +33,12 @@ class InputPipeline(private val state: ExplorerState) {
 
         state.dragCurrentX = event.x
         state.dragCurrentY = event.y
+
+        // Check if it's a "real" drag
+        val dist = hypot(event.x - state.dragStartX, event.y - state.dragStartY)
+
+        if (!isRealDrag && dist < DRAG_THRESHOLD)
+            return
 
         // Recalculate selection rectangle
         val bounds = state.getSelectionBounds() ?: return
@@ -100,16 +111,22 @@ class InputPipeline(private val state: ExplorerState) {
     }
 
     fun handleClick(event: MouseEvent) {
-        // If hovering - toggle selection
-        state.hoveredPoint?.let { atom ->
-            if (state.selectedPoint.contains(atom)) {
-                state.selectedPoint.remove(atom)
-            } else {
-                state.selectedPoint.add(atom)
+        if (state.isDragging)
+            return
+        
+        // Only handle click if real drag
+        if (!isRealDrag) {
+            // If hovering - toggle selection
+            state.hoveredPoint?.let { atom ->
+                if (state.selectedPoint.contains(atom)) {
+                    state.selectedPoint.remove(atom)
+                } else {
+                    state.selectedPoint.add(atom)
+                }
+            }?: run {
+                // Clear if empty space is clicked
+                state.selectedPoint.clear()
             }
-        }?: run {
-            // Clear if empty space is clicked
-            state.selectedPoint.clear()
         }
     }
 }

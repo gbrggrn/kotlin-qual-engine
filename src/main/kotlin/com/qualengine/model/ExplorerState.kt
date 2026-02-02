@@ -5,7 +5,7 @@ import com.qualengine.logic.MathUtils.Point2D
 class ExplorerState {
     // Atoms data
     var allPoints: List<Point2D> = emptyList()
-    var moleculeContents: List<String> = emptyList()
+    var pointContents: List<String> = emptyList()
 
     // Viewport
     var width: Double = 0.0

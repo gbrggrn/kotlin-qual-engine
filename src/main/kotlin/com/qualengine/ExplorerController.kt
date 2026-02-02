@@ -23,6 +23,7 @@ class ExplorerController {
     @FXML private lateinit var mapContainer: StackPane
     @FXML private lateinit var mapCanvas: Canvas
     @FXML private lateinit var loadingBox: VBox
+    @FXML private lateinit var analyzingStatusLabel: Label
 
     // MouseEvent handling variables
     private val explorerState = ExplorerState()
@@ -89,7 +90,7 @@ class ExplorerController {
 
     private fun renderPoints(points: List<MathUtils.Point2D>, texts: List<String>) {
         explorerState.allPoints = points
-        explorerState.moleculeContents = texts
+        explorerState.pointContents = texts
         explorerState.width = mapCanvas.width
         explorerState.height = mapCanvas.height
 
@@ -100,36 +101,57 @@ class ExplorerController {
         detailsBox.children.clear()
 
         if (explorerState.selectedPoint.isEmpty()){
-            val placeholder = Label("Select dots on the map to view details.")
+            val placeholder = Label("Select dots on the map to view details.\n\nHold SHIFT to select multiple.")
             placeholder.isWrapText = true
-            placeholder.style = "-fx-text-fill: #7f8c8d; -fx-font-style: italic;"
+            placeholder.style = "-fx-text-fill: #95a5a6; -fx-font-style: italic; -fx-font-size: 14px;"
+            placeholder.textAlignment = javafx.scene.text.TextAlignment.CENTER
+            placeholder.maxWidth = Double.MAX_VALUE
             detailsBox.children.add(placeholder)
             return
         }
 
         val selectedSubset = explorerState.selectedPoint.take(numberOfDetailsFor)
 
-        for (atom in selectedSubset) {
-            val content = explorerState.moleculeContents.getOrNull(atom.originalIndex) ?: "Unknown"
+        for (point in selectedSubset) {
+            val content = explorerState.pointContents.getOrElse(point.originalIndex) { "Unknown Data "}
 
+            // Create card
+            val card = VBox()
+            card.style = """
+                -fx-background-color: white;
+                -fx-border-color: #ecf0f1;
+                -fx-border-width: 1;
+                -fx-border-radius: 6;
+                -fx-background-radius: 6;
+                -fx-padding: 8;
+                -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 3, 0, 0, 1);
+            """.trimIndent()
+
+            // ID header
+            val header = Label("ID: ${point.originalIndex}")
+            header.style = "-fx-font-weight: bold; -fx-text-fill: #2c3e50; -fx-font-size: 10px;"
+
+            // Content
             val textArea = TextArea(content)
-
             textArea.isEditable = false
             textArea.isWrapText = true
-            textArea.prefRowCount = 3
+            textArea.prefRowCount = 4
             textArea.style = """
-                -fx-background-color: white;
-                -fx-border-color: #bdc3c7;
-                -fx-border-radius: 4;
-                -fx-background-radius: 4;
+                -fx-background-color: transparent;
+                -fx-background-insets: 0;
+                -fx-padding: 0;
                 """.trimIndent()
 
-            detailsBox.children.add(textArea)
+            card.children.addAll(header, textArea)
+            detailsBox.children.add(card)
         }
 
-        if (explorerState.selectedPoint.size > 50){
-            val warning = Label("... and ${explorerState.selectedPoint.size - 50} more items.")
-            warning.style = "-fx-text-fill: #e74c3c; -fx-font-weight: bold;"
+        // Overflow warning
+        if (explorerState.selectedPoint.size > numberOfDetailsFor){
+            val hiddenCount = explorerState.selectedPoint.size - numberOfDetailsFor
+            val warning = Label("... and ${explorerState.selectedPoint.size - numberOfDetailsFor} more items.")
+            warning.style = "-fx-text-fill: #7f8c8d; -fx-font-weight: bold; -fx-alignment: center;"
+            warning.maxWidth = Double.MAX_VALUE
             detailsBox.children.add(warning)
         }
     }
@@ -183,12 +205,15 @@ class ExplorerController {
                 explorerState.pointClusterIds = clusterResult.clusterIds
                 explorerState.clusterCenters = clusterResult.clusterCenters
                 explorerState.clusterThemes = themes
-                explorerState.moleculeContents = texts
+                explorerState.pointContents = texts
                 explorerState.width = mapCanvas.width
                 explorerState.height = mapCanvas.height
 
                 renderer.render(explorerState)
             }
+
+            val totalClusters = clusterResult.clusterCenters.size
+            var processed = 0
 
             // AI-labeling! Runs on same thread in the background, updating the UI progressively
             for (clusterId in clusterResult.clusterCenters.keys) {
@@ -204,9 +229,12 @@ class ExplorerController {
                 themes[clusterId] = smartLabel
                 Platform.runLater {
                     explorerState.clusterThemes = themes
+                    analyzingStatusLabel.text = "Identifying theme ${processed + 1} / $totalClusters"
                     renderer.render(explorerState)
                 }
+                processed++
             }
+            Platform.runLater { analyzingStatusLabel.text = "Theme analysis complete." }
         }
     }
 
