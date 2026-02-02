@@ -20,15 +20,17 @@ class ExplorerController {
     @FXML private lateinit var mapCanvas: Canvas
     @FXML private lateinit var loadingBox: VBox
 
-    // This controller owns the explorer state
+    // MouseEvent handling variables
     private val explorerState = ExplorerState()
-
-    // This controller owns the mouse event workers for the canvas
-    private val renderer = CanvasRenderer(mapCanvas)
-    private val inputPipeline = InputPipeline(explorerState)
+    private lateinit var renderer: CanvasRenderer
+    private lateinit var pipeline: InputPipeline
 
     @FXML
     fun initialize() {
+        // Initialize logic classes to handle mouse events
+        renderer = CanvasRenderer(mapCanvas)
+        pipeline = InputPipeline(explorerState)
+
         // Make canvas resizable
         mapCanvas.widthProperty().bind(mapContainer.widthProperty())
         mapCanvas.heightProperty().bind(mapContainer.heightProperty())
@@ -37,11 +39,27 @@ class ExplorerController {
         mapCanvas.widthProperty().addListener { _ -> drawMap() }
         mapCanvas.heightProperty().addListener { _ -> drawMap() }
 
+        // Bind resize events
+        mapCanvas.widthProperty().bind(mapContainer.widthProperty())
+        mapCanvas.heightProperty().bind(mapContainer.heightProperty())
+
+        // Resize listener -> update state -> redraw
+        mapCanvas.widthProperty().addListener { _, _, newW->
+            explorerState.width = newW.toDouble(); renderer.render(explorerState)
+        }
+        mapCanvas.heightProperty().addListener { _, _, newW ->
+            explorerState.height = newW.toDouble(); renderer.render(explorerState)
+        }
+
         // Wire the InputPipeline chain
         mapCanvas.setOnMouseMoved { event ->
-            inputPipeline.handleMove(event)
+            pipeline.handleMove(event)
+            renderer.render(explorerState)
+        }
 
-            renderer.render(state)
+        mapCanvas.setOnMouseClicked { event ->
+            pipeline.handleClick(event)
+            renderer.render(explorerState)
         }
     }
 

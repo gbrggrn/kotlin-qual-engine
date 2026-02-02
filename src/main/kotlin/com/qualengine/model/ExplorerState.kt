@@ -12,6 +12,9 @@ class ExplorerState {
     var mouseX: Double = 0.0
     var mouseY: Double = 0.0
 
+    var width: Double = 0.0
+    var height: Double = 0.0
+
     var hoveredAtom: Point2D? = null
     var selectedAtoms = mutableSetOf<Point2D>()
 
