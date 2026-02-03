@@ -126,12 +126,12 @@ class InputPipeline(
         if (current.isDragging && isRealDrag) return // Ignore click if we just finished a drag
 
         // Toggle selection if hovering
-        current.hoveredPoint?.let { atom ->
+        current.hoveredPoint?.let { point ->
             // Create a new set based on the old one
-            val newSelection = if (current.selectedPoints.contains(atom)) {
-                current.selectedPoints - atom // Toggle Off
+            val newSelection = if (current.selectedPoints.contains(point)) {
+                current.selectedPoints - point // Toggle Off
             } else {
-                current.selectedPoints + atom // Toggle On
+                current.selectedPoints + point // Toggle On
             }
 
             context.update(current.copy(selectedPoints = newSelection))

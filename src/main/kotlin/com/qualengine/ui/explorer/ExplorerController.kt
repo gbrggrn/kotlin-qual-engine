@@ -165,9 +165,6 @@ class ExplorerController {
                 clusterResult.clusterIds
             )
 
-            // E. NORMALIZE (Fit to Unit Square 0..1)
-            //val viewablePoints = LayoutEngine.normalizeToUnitSquare(finalPoints)
-
             // --- COMMIT STATE ---
             Platform.runLater {
                 // Create initial themes map (Loading state)
