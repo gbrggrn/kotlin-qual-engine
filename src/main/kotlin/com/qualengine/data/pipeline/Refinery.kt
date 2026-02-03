@@ -4,7 +4,7 @@ import com.qualengine.core.analysis.OllamaEnricher
 import com.qualengine.core.analysis.SemanticCompressor
 import com.qualengine.data.client.OllamaClient
 import com.qualengine.data.db.model.Documents
-import com.qualengine.core.analysis.Moleculizer
+import com.qualengine.core.analysis.ParagraphSplitter
 import com.qualengine.data.db.model.Paragraphs
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -33,7 +33,7 @@ object Refinery {
         onProgress(-1.0, "Moleculizing...")
 
         // Moleculize (split by paragraph)
-        val molecules = Moleculizer.moleculize(docId, rawText)
+        val molecules = ParagraphSplitter.split(docId, rawText)
         val total = molecules.size
         onProgress(0.0, "Enriching & Vectorizing $total paragraphs...")
 

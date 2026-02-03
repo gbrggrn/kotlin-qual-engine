@@ -9,7 +9,7 @@ data class SentenceAtom(
     val index: Int
 )
 
-data class ParagraphMolecule (
+data class Paragraph (
     val id: String = UUID.randomUUID().toString(),
     val docId: String,
     val content: String,
