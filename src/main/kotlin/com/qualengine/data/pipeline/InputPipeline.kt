@@ -1,131 +1,145 @@
 package com.qualengine.data.pipeline
 
-import com.qualengine.core.math.MathUtils
-import com.qualengine.data.model.ExplorerState
 import javafx.scene.input.MouseEvent
+import com.qualengine.core.AnalysisContext
+import com.qualengine.data.model.VectorPoint
 import kotlin.math.hypot
-import kotlin.math.pow
 import kotlin.math.sqrt
+import kotlin.math.pow
 
-class InputPipeline(private val state: ExplorerState) {
+class InputPipeline(
+    // We keep the dependency injection pattern you had
+    private val context: AnalysisContext
+) {
     private val PADDING = 40.0
     private val DRAG_THRESHOLD = 5.0
     private var isRealDrag = false
 
-    fun handleMousePressed(event: MouseEvent){
-        state.isDragging = true
-        state.dragStartX = event.x
-        state.dragStartY = event.y
-        state.dragCurrentX = event.x
-        state.dragCurrentY = event.y
+    // --- HELPER: Coordinate Transform ---
+    // Your old code calculated min/max every frame.
+    // The new pipeline guarantees projectedX is 0..1, so we just scale it.
+    private fun toScreenX(normalizedX: Double, width: Double): Double {
+        return normalizedX * (width - PADDING * 2) + PADDING
+    }
+
+    private fun toScreenY(normalizedY: Double, height: Double): Double {
+        return normalizedY * (height - PADDING * 2) + PADDING
+    }
+
+    fun handleMousePressed(event: MouseEvent) {
+        val current = context.state
 
         isRealDrag = false
 
-        // Clear selection UNLESS holding shift/control
-        if (!event.isShiftDown && !event.isShortcutDown){
-            state.selectedPoint.clear()
+        // Logic: Clear selection UNLESS holding shift/control
+        val newSelection = if (!event.isShiftDown && !event.isShortcutDown) {
+            emptySet()
+        } else {
+            current.selectedPoints
         }
+
+        context.update(current.copy(
+            isDragging = true,
+            dragStartX = event.x,
+            dragStartY = event.y,
+            dragCurrentX = event.x,
+            dragCurrentY = event.y,
+            selectedPoints = newSelection
+        ))
     }
 
     fun handleMouseDragged(event: MouseEvent) {
-        if (!state.isDragging)
-            return
+        val current = context.state
+        if (!current.isDragging) return
 
-        state.dragCurrentX = event.x
-        state.dragCurrentY = event.y
-
-        // Check if it's a "real" drag
-        val dist = hypot(event.x - state.dragStartX, event.y - state.dragStartY)
-
-        if (!isRealDrag && dist < DRAG_THRESHOLD)
-            return
-
-        // Recalculate selection rectangle
-        val bounds = state.getSelectionBounds() ?: return
-
-        if (state.allPoints.isEmpty())
-            return
-
-        val minX = state.allPoints.minOf { it.x }
-        val minY = state.allPoints.minOf { it.y }
-        val maxX = state.allPoints.maxOf { it.x }
-        val maxY = state.allPoints.maxOf { it.y }
-        val rangeX = (maxX - minX).coerceAtLeast(0.0001)
-        val rangeY = (maxY - minY).coerceAtLeast(0.0001)
-        val width = state.width
-        val height = state.height
-
-        for (point in state.allPoints){
-            val screenX = ((point.x - minX) / rangeX) * (width - PADDING * 2) + PADDING
-            val screenY = ((point.y - minY) / rangeY) * (height - PADDING * 2) + PADDING
-
-            if (screenX >= bounds.x && screenX <= bounds.x + bounds.w &&
-                screenY >= bounds.y && screenY <= bounds.y + bounds.h) {
-                state.selectedPoint.add(point)
-            }
+        // 1. Check Threshold (Your "Real Drag" Logic)
+        if (!isRealDrag) {
+            val dist = hypot(event.x - current.dragStartX, event.y - current.dragStartY)
+            if (dist < DRAG_THRESHOLD) return // Ignore jitters
+            isRealDrag = true
         }
+
+        // 2. Calculate Marquee Bounds
+        // We use min/max to ensure x is always top-left, even if dragging backwards
+        val boundsX = minOf(current.dragStartX, event.x)
+        val boundsY = minOf(current.dragStartY, event.y)
+        val boundsW = kotlin.math.abs(event.x - current.dragStartX)
+        val boundsH = kotlin.math.abs(event.y - current.dragStartY)
+
+        // 3. Find Points Inside
+        // OPTIMIZATION: We don't need to recalculate min/max of the dataset here.
+        // We assume projectedX is already normalized (0..1).
+        val captured = current.allPoints.filter { point ->
+            val sx = toScreenX(point.projectedX, current.width)
+            val sy = toScreenY(point.projectedY, current.height)
+
+            sx >= boundsX && sx <= boundsX + boundsW &&
+                    sy >= boundsY && sy <= boundsY + boundsH
+        }.toSet()
+
+        // 4. Update State
+        // Note: If shift is held, we usually ADD to selection, but for marquee
+        // it's often simpler to replace. Let's assume replace for the drag box.
+        context.update(current.copy(
+            dragCurrentX = event.x,
+            dragCurrentY = event.y,
+            selectedPoints = captured
+        ))
     }
 
     fun handleMouseReleased(event: MouseEvent) {
-        state.isDragging = false
+        val current = context.state
+        context.update(current.copy(isDragging = false))
     }
 
     fun handleMouseMove(event: MouseEvent) {
-        if (state.isDragging)
-            return
+        val current = context.state
+        if (current.isDragging || current.allPoints.isEmpty()) return
 
         val mouseX = event.x
         val mouseY = event.y
-        val width = state.width
-        val height = state.height
 
-        // Determine canvas size (same as in CanvasRenderer)
-        if (state.allPoints.isEmpty())
-            return
+        // --- HIT TESTING ---
+        var closestAtom: VectorPoint? = null
+        var minDistance = 10.0 // Interaction Radius
 
-        val minX = state.allPoints.minOf { it.x }
-        val maxX = state.allPoints.maxOf { it.x }
-        val minY = state.allPoints.minOf { it.y }
-        val maxY = state.allPoints.maxOf { it.y }
+        for (point in current.allPoints) {
+            val sx = toScreenX(point.projectedX, current.width)
+            val sy = toScreenY(point.projectedY, current.height)
 
-        // Begin testing for hits
-        var closestAtom: MathUtils.Point2D? = null
-        var minDistance = 10.0
+            val distance = sqrt((mouseX - sx).pow(2) + (mouseY - sy).pow(2))
 
-        for (point in state.allPoints) {
-            // Convert points to coordinates on the canvas
-            val screenX = ((point.x - minX) / (maxX - minX)) * (width - PADDING * 2) + PADDING
-            val screenY = ((point.y - minY) / (maxY - minY)) * (height - PADDING * 2) + PADDING
-
-            // Calculate distance
-            val distance = sqrt((mouseX - screenX).pow(2) + (mouseY - screenY).pow(2))
-
-            // Check if distance is WITHIN min distance
             if (distance < minDistance) {
                 minDistance = distance
                 closestAtom = point
             }
         }
-        // Update state
-        state.hoveredPoint = closestAtom
+
+        // Only update if something changed (Performance check)
+        if (current.hoveredPoint != closestAtom) {
+            context.update(current.copy(hoveredPoint = closestAtom))
+        }
     }
 
     fun handleClick(event: MouseEvent) {
-        if (state.isDragging)
-            return
+        val current = context.state
+        if (current.isDragging && isRealDrag) return // Ignore click if we just finished a drag
 
-        // Only handle click if real drag
-        if (!isRealDrag) {
-            // If hovering - toggle selection
-            state.hoveredPoint?.let { atom ->
-                if (state.selectedPoint.contains(atom)) {
-                    state.selectedPoint.remove(atom)
-                } else {
-                    state.selectedPoint.add(atom)
-                }
-            }?: run {
-                // Clear if empty space is clicked
-                state.selectedPoint.clear()
+        // Logic: Toggle selection if hovering
+        current.hoveredPoint?.let { atom ->
+            // Create a new set based on the old one
+            val newSelection = if (current.selectedPoints.contains(atom)) {
+                current.selectedPoints - atom // Toggle Off
+            } else {
+                current.selectedPoints + atom // Toggle On
+            }
+
+            context.update(current.copy(selectedPoints = newSelection))
+
+        } ?: run {
+            // Clicked empty space -> Clear
+            if (!event.isShiftDown && !event.isShortcutDown) {
+                context.update(current.copy(selectedPoints = emptySet()))
             }
         }
     }

@@ -3,8 +3,10 @@ package com.qualengine.data.db
 import com.qualengine.data.db.model.Documents
 import com.qualengine.data.db.model.Paragraphs
 import com.qualengine.data.db.model.Sentences
+import com.qualengine.data.model.VectorPoint
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.File
 
@@ -21,5 +23,54 @@ object DatabaseFactory {
         }
 
         println("Refinery Storage: ONLINE [$dbFile.absolutePath]")
+    }
+
+    /**
+     * Fetches all rows and converts them directly into the domain model.
+     * This is the "Entry Point" for your pipeline.
+     */
+    fun getAllVectorPoints(): List<VectorPoint> {
+        return transaction {
+            // Assuming your table object is named 'Paragraphs'
+            Paragraphs.selectAll().map { row ->
+
+                // 1. Parse the Embedding (String -> DoubleArray)
+                // Stored in DB as: "[0.012, -0.34, ...]"
+                val rawString = row[Paragraphs.vector] ?: ""
+                val vectorArray = parseEmbedding(rawString)
+
+                // 2. Create the Clean Object
+                VectorPoint(
+                    id = row[Paragraphs.id],
+                    embedding = vectorArray,
+                    metaData = row[Paragraphs.content], // The text snippet
+
+                    // Defaults (will be calculated later by pipeline)
+                    projectedX = 0.0,
+                    projectedY = 0.0,
+                    clusterId = -1
+                )
+            }
+        }
+    }
+
+    /**
+     * Helper: Converts a database string like "[0.1, 0.2]" into a DoubleArray.
+     * Uses manual string manipulation which is faster than Regex/JSON for this specific format.
+     */
+    private fun parseEmbedding(dbString: String): DoubleArray {
+        // Clean up brackets if they exist
+        val clean = dbString.trim().removeSurrounding("[", "]")
+
+        if (clean.isBlank()) return DoubleArray(0)
+
+        // Split by comma and convert
+        // .map { it.toDouble() } creates a List, so we convert to Array at the end
+        try {
+            return clean.split(",").map { it.trim().toDouble() }.toDoubleArray()
+        } catch (e: NumberFormatException) {
+            println("Error parsing vector: ${e.message}")
+            return DoubleArray(0)
+        }
     }
 }
