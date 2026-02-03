@@ -29,14 +29,13 @@ class ExplorerController {
     @FXML private lateinit var detailsBox: VBox
 
     // --- LOGIC ENGINE ---
-    // The Renderer is now "Dumb" - it just paints what is in the Context
+    // "Dumb" renderer - paints based on AppState
     private lateinit var renderer: ExplorerRenderer
 
     // Handles mouse interaction (Selection, Hover)
-    // NOTE: You might need to update InputPipeline to use AnalysisContext later
     private lateinit var pipeline: InputPipeline
 
-    // Local cache of raw data (so we don't hit DB on every re-cluster)
+    // Local cache of raw data
     private var cachedPoints: List<VectorPoint> = emptyList()
 
     // Config
@@ -45,26 +44,32 @@ class ExplorerController {
     @FXML
     fun initialize() {
         renderer = ExplorerRenderer(mapCanvas)
-        // 2. Setup Interaction
-        // We pass the global state to the pipeline
         pipeline = InputPipeline(AnalysisContext)
 
-        // 3. Bind Layout Resizing
+        // --- Bind layout resizing
         mapCanvas.widthProperty().bind(mapContainer.widthProperty())
         mapCanvas.heightProperty().bind(mapContainer.heightProperty())
 
-        // Redraw on Resize
+        // Redraw on resize
         val resizeListener = { _: Any, _: Any, _: Any ->
-            // Update Context with new dimensions
+            // Get canvas size/height
+            val w = mapCanvas.width
+            val h = mapCanvas.height
+
+            // Update canvas size/height in state
             val currentState = AnalysisContext.state
-            // If you track width/height in state, update it here.
-            // Otherwise just re-render.
-            renderer.render(currentState)
+            AnalysisContext.update(currentState.copy(
+                width = w,
+                height = h
+            ))
+
+            // Re-render
+            renderer.render(AnalysisContext.state)
         }
         mapCanvas.widthProperty().addListener(resizeListener)
         mapCanvas.heightProperty().addListener(resizeListener)
 
-        // 4. Bind Mouse Events to Pipeline
+        // --- Bind MouseEvents to InputPipeline
         mapCanvas.setOnMouseMoved { e -> pipeline.handleMouseMove(e); repaint() }
         mapCanvas.setOnMousePressed { e -> pipeline.handleMousePressed(e); repaint() }
         mapCanvas.setOnMouseDragged { e -> pipeline.handleMouseDragged(e); repaint() }
@@ -78,7 +83,7 @@ class ExplorerController {
             updateSidePanel()
         }
 
-        // 5. Initial Data Load
+        // --- Initial Data Load
         loadDataFromDb()
     }
 
@@ -134,7 +139,7 @@ class ExplorerController {
         thread(start = true) {
             val workingPoints = cachedPoints
 
-            // A. CLUSTERING (DBSCAN)
+            // --- CLUSTERING (DBSCAN) ---
             val dbscan = DBSCAN(epsilon = 0.23, minPoints = 3)
             val clusterResult = dbscan.runDBSCAN(workingPoints)
 
@@ -143,7 +148,7 @@ class ExplorerController {
                 p.copy(clusterId = clusterResult.clusterIds[index])
             }
 
-            // B. REFINEMENT (The Orphanage)
+            // --- REFINEMENT (The Orphanage) ---
             // Modify IDs in place to adopt orphans
             ClusterRefiner.assignOrphans(clusteredPoints, clusterResult.clusterIds, maxDistance = 0.25)
 
@@ -152,13 +157,13 @@ class ExplorerController {
                 p.copy(clusterId = clusterResult.clusterIds[index])
             }
 
-            // C. DIMENSIONALITY REDUCTION (PCA)
+            // --- DIMENSIONALITY REDUCTION (PCA) ---
             Platform.runLater { analyzingStatusLabel.text = "Projecting 2D Map..." }
             val pcaPoints = PCA.performPCA(clusteredPoints)
 
             val unitSquarePoints = LayoutEngine.normalizeToUnitSquare(pcaPoints)
 
-            // D. LAYOUT (Archipelago)
+            // --- LAYOUT (Archipelago) ---
             // Calculates gravity and island positions
             val (finalPoints, islandCenters) = LayoutEngine.createArchipelagoLayout(
                 unitSquarePoints,

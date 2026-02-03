@@ -101,7 +101,7 @@ class ExplorerRenderer(private val canvas: Canvas){
 
                     if (clusterId != -1 && state.clusterCenters.containsKey(clusterId)) {
 
-                        // --- DENSITY METRIC LOGIC (New) ---
+                        // --- DENSITY METRIC LOGIC ---
                         val center = state.clusterCenters[clusterId]!!
                         val centerX = (center.projectedX * drawWidth) + padding
                         val centerY = (center.projectedY * drawHeight) + padding

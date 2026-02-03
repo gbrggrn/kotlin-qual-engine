@@ -8,16 +8,12 @@ import kotlin.math.sqrt
 import kotlin.math.pow
 
 class InputPipeline(
-    // We keep the dependency injection pattern you had
     private val context: AnalysisContext
 ) {
     private val PADDING = 40.0
     private val DRAG_THRESHOLD = 5.0
     private var isRealDrag = false
 
-    // --- HELPER: Coordinate Transform ---
-    // Your old code calculated min/max every frame.
-    // The new pipeline guarantees projectedX is 0..1, so we just scale it.
     private fun toScreenX(normalizedX: Double, width: Double): Double {
         return normalizedX * (width - PADDING * 2) + PADDING
     }
