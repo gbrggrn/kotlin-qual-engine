@@ -4,111 +4,143 @@ import com.qualengine.model.ExplorerState
 
 import javafx.scene.canvas.Canvas
 import javafx.scene.paint.Color
+import kotlin.math.absoluteValue
+import kotlin.math.ceil
+import kotlin.math.sqrt
 
 class CanvasRenderer(private val canvas: Canvas){
     fun render(state: ExplorerState) {
         val graphics = canvas.graphicsContext2D
+        val padding = 40.0
         val width = canvas.width
         val height = canvas.height
 
-        // Clear screen
+        // 1. Clear Screen
         graphics.fill = Color.web("#2c3e50")
         graphics.fillRect(0.0, 0.0, width, height)
 
-        if (state.allPoints.isEmpty())
-            return
+        if (state.allPoints.isEmpty()) return
 
-        // Calculate scale
-        val minX = state.allPoints.minOf { it.x }
-        val maxX = state.allPoints.maxOf { it.x }
-        val minY = state.allPoints.minOf { it.y }
-        val maxY = state.allPoints.maxOf { it.y }
-
-        val rangeX = maxX - minX
-        val rangeY = maxY - minY
-
-        val padding = 40.0
+        // 2. Calculate Scale
+        val drawWidth = width - (padding * 2)
+        val drawHeight = height - (padding * 2)
 
         val clusterPalette = listOf(
             Color.CYAN, Color.MAGENTA, Color.LIME, Color.ORANGE, Color.DODGERBLUE, Color.HOTPINK
         )
 
+        // --- UPDATED: DYNAMIC GRID WIREFRAMES ---
+        // 1. Calculate Grid Dimensions (Must match ClusterUtils exactly)
+        val validClusterCount = state.clusterCenters.size
+
+        // Default fallback if no clusters exist yet
+        var maxIslandRadiusRel = 0.05
+
+        if (validClusterCount > 0) {
+            // Calculate Rows/Cols exactly like the Layout Engine
+            val cols = ceil(sqrt(validClusterCount.toDouble())).toInt()
+            val rows = ceil(validClusterCount.toDouble() / cols).toInt()
+
+            val cellWidth = 1.0 / cols
+            val cellHeight = 1.0 / rows
+
+            // 0.40 = 40% of the cell's smallest dimension
+            maxIslandRadiusRel = Math.min(cellWidth, cellHeight) * 0.40
+        }
+
+        // 2. Calculate Pixel Radius
+        val radiusPx = maxIslandRadiusRel * drawWidth
+
+        // 3. Draw the Circles
+        graphics.stroke = Color.rgb(255, 255, 255, 0.15)
+        graphics.lineWidth = 1.0
+
+        for ((_, centerPoint) in state.clusterCenters) {
+            val screenX = (centerPoint.x * drawWidth) + padding
+            val screenY = (centerPoint.y * drawHeight) + padding
+
+            graphics.strokeOval(
+                screenX - radiusPx,
+                screenY - radiusPx,
+                radiusPx * 2,
+                radiusPx * 2
+            )
+        }
+        // ------------------------------------------------
+
+        // 3. Draw Points
         for ((index, point) in state.allPoints.withIndex()) {
-            val screenX = ((point.x - minX) / rangeX) * (width - padding * 2) + padding
-            val screenY = ((point.y - minY) / rangeY) * (height - padding * 2) + padding
+            val safeX = point.x.coerceIn(0.0, 1.0)
+            val safeY = point.y.coerceIn(0.0, 1.0)
+
+            val screenX = (safeX * drawWidth) + padding
+            val screenY = (safeY * drawHeight) + padding
 
             when {
-                // Hovered point = yellow
+                // Hovered
                 point == state.hoveredPoint -> {
                     graphics.fill = Color.YELLOW
-                    graphics.fillOval(screenX - 4, screenY -4, 8.0, 8.0)
-
+                    graphics.fillOval(screenX - 4, screenY - 4, 8.0, 8.0)
                     graphics.stroke = Color.WHITE
                     graphics.strokeText("ID: ${point.originalIndex}", screenX + 10, screenY)
                 }
-                // Selected point = red
+                // Selected
                 state.selectedPoint.contains(point) -> {
                     graphics.fill = Color.RED
-                    graphics.fillOval(screenX -3, screenY -3, 6.0, 6.0)
+                    graphics.fillOval(screenX - 3, screenY - 3, 6.0, 6.0)
                 }
+                // Normal
                 else -> {
                     val clusterId = state.pointClusterIds.getOrElse(index) { 0 }
 
-                    if (clusterId == -1) {
-                        // No cluster = gray
-                        graphics.fill = Color.rgb(150, 150, 150, 0.3)
-                    } else if (clusterId > 0) {
-                        // Clustered = color from palette
-                        val colorIndex = (clusterId - 1) % clusterPalette.size
-                        graphics.fill = clusterPalette[colorIndex]
-                    } else {
-                        // Fallback color = white
-                        graphics.fill = Color.WHITE
-                    }
+                    if (clusterId != -1 && state.clusterCenters.containsKey(clusterId)) {
 
-                    graphics.fillOval(screenX - 2, screenY -2, 4.0, 4.0)
+                        // --- DENSITY METRIC LOGIC (New) ---
+                        val center = state.clusterCenters[clusterId]!!
+                        val centerX = (center.x * drawWidth) + padding
+                        val centerY = (center.y * drawHeight) + padding
+
+                        // Distance from center of island
+                        val dx = screenX - centerX
+                        val dy = screenY - centerY
+                        val dist = Math.sqrt(dx*dx + dy*dy)
+
+                        // Normalize (0.0 = Center, 1.0 = Edge)
+                        // radiusPx is the max size of the island we calculated earlier
+                        val normalizedDist = (dist / radiusPx).coerceIn(0.0, 1.0)
+
+                        // Dynamic Sizing: Center = 6px, Edge = 2.5px
+                        // This creates the "3D Sphere" effect
+                        val dotSize = 6.0 - (normalizedDist * 3.5)
+
+                        val colorIndex = (clusterId).absoluteValue % clusterPalette.size
+                        graphics.fill = clusterPalette[colorIndex]
+
+                        // Draw centered
+                        graphics.fillOval(screenX - (dotSize / 2), screenY - (dotSize / 2), dotSize, dotSize)
+                    }
+                    else {
+                        // Background Stars (Faint, tiny, uniform)
+                        graphics.fill = Color.rgb(200, 200, 200, 0.15)
+                        graphics.fillOval(screenX - 1, screenY - 1, 2.0, 2.0)
+                    }
                 }
             }
         }
-        // Draw box selection (multiples)
-        state.getSelectionBounds()?.let { box ->
-            graphics.stroke = Color.CYAN
-            graphics.lineWidth = 1.0
 
-            graphics.fill = Color.rgb(0, 255, 255, 0.2)
-            graphics.fillRect(box.x, box.y, box.w, box.h)
-            graphics.strokeRect(box.x, box.y, box.w, box.h)
-        }
-
-        // Draw cluster labels
+        // 5. Draw Labels
         graphics.textAlign = javafx.scene.text.TextAlignment.CENTER
         graphics.textBaseline = javafx.geometry.VPos.CENTER
         graphics.font = javafx.scene.text.Font.font("Arial", javafx.scene.text.FontWeight.BOLD, 14.0)
 
         for ((id, centerPoint) in state.clusterCenters) {
-            // Center point to screen coordinates
-            val screenX = ((centerPoint.x - minX) / rangeX) * (width - padding * 2) + padding
-            val screenY = ((centerPoint.y - minY) / rangeY) * (height - padding * 2) + padding
+            val screenX = (centerPoint.x * drawWidth) + padding
+            val screenY = (centerPoint.y * drawHeight) + padding
 
-            // Get the label
             val label = state.clusterThemes[id] ?: "Group $id"
 
-            // Draw background for text
-            val textWidth = label.length * 9.0
-            val textHeight = 24.0
-
-            graphics.fill = Color.rgb(0, 0, 0, 0.7)
-            graphics.fillRoundRect(
-                screenX - (textWidth / 2) - 5,
-                screenY - (textHeight / 2),
-                textWidth + 10,
-                textHeight,
-                10.0, 10.0
-            )
-
-            // Draw text
             graphics.fill = Color.WHITE
-            graphics.fillText(label, screenX, screenY)
+            graphics.fillText(label, screenX, screenY - radiusPx - 15)
         }
     }
 }

@@ -166,13 +166,8 @@ class ExplorerController {
             // --- 1. DATA INGESTION ---
             val (vectors, texts) = transaction {
                 val rows = Paragraphs.selectAll().toList()
-
-                // Parse vectors
-                val v = rows.map { row ->
-                    row[Paragraphs.vector]!!.split(",").map { it.toDouble() }
-                }
+                val v = rows.map { row -> row[Paragraphs.vector]!!.split(",").map { it.toDouble() } }
                 val t = rows.map { row -> row[Paragraphs.content] }
-
                 Pair(v, t)
             }
 
@@ -186,35 +181,31 @@ class ExplorerController {
 
             // --- 2. THE MATHEMATICS ---
 
-            // A. Clustering (High Dimensional Truth)
-            Platform.runLater { analyzingStatusLabel.text = "Clustering vectors..." }
-            val clusterResult = ClusterUtils.runDBSCAN(vectors, epsilon = 0.21, minPoints = 3)
+            // Semantic clustering (DBSCAN 384D)
+            Platform.runLater { analyzingStatusLabel.text = "Clustering & Architecting..." }
+            val clusterResult = ClusterUtils.runDBSCAN(vectors, epsilon = 0.23, minPoints = 3)
 
+            // Try to assign outliers with "looser" rules
             ClusterUtils.assignOrphansToNearestCluster(vectors, clusterResult.clusterIds, maxDistance = 0.25)
 
-            // B. Projection (2D Visual Shadow)
+            // Visual raw materials (PCA 2D)
             val rawPoints = MathUtils.performPCA(vectors)
             val normalizedPoints = ClusterUtils.normalizePointsForClustering(rawPoints)
 
-            // C. Calculate Centers
-            // High-D IDs + the 2D points to find where to put the label
-            val calculatedCenters = ClusterUtils.calculate2DCentroids(normalizedPoints, clusterResult.clusterIds)
-
-            // Pull points 30% closer to their semantic home so the map looks cleaner
-            val prettyPoints = ClusterUtils.applyVisualGravity(
+            // Archipelago transformation
+            val (archipelagoPoints, islandCenters) = ClusterUtils.createArchipelagoLayout(
                 normalizedPoints,
                 clusterResult.clusterIds,
-                calculatedCenters,
-                strength = 0.35 // 0.2 = subtle, 0.5 = distinct islands
+                0
             )
 
             // --- 3. CONSTRUCT THE STATE ---
-            val themes = calculatedCenters.keys.associateWith { "Analyzing..." }.toMutableMap()
+            val themes = islandCenters.keys.associateWith { "Analyzing..." }.toMutableMap()
 
             Platform.runLater {
                 loadingBox.isVisible = false
 
-                val finalPoints = prettyPoints.mapIndexed { index, p ->
+                val finalPoints = archipelagoPoints.mapIndexed { index, p ->
                     MathUtils.Point2D(x = p.x, y = p.y, originalIndex = index)
                 }
 
@@ -224,7 +215,7 @@ class ExplorerController {
                 explorerState.pointContents = texts // Text lives here
 
                 // Map Metadata
-                explorerState.clusterCenters = calculatedCenters
+                explorerState.clusterCenters = islandCenters
                 explorerState.clusterThemes = themes
                 explorerState.width = mapCanvas.width
                 explorerState.height = mapCanvas.height
@@ -234,17 +225,33 @@ class ExplorerController {
             }
 
             // --- 4. THE AI ENRICHMENT LOOP ---
-            val totalClusters = calculatedCenters.size
+            val totalClusters = archipelagoPoints.size
             var processed = 0
 
-            for (clusterId in calculatedCenters.keys) {
+            for (clusterId in islandCenters.keys) {
                 // Find text snippets belonging to this cluster
                 val clusterSnippets = vectors.indices
                     .filter { i -> clusterResult.clusterIds[i] == clusterId }
                     .map { i -> texts[i] }
 
                 // Summarize
-                val smartLabel = OllamaEnricher.summarizeCluster(clusterSnippets)
+                var smartLabel = OllamaEnricher.summarizeCluster(clusterSnippets)
+
+                // Sanitize
+                // 1. Remove "1.", quotes, punctuation
+                smartLabel = smartLabel.replace(Regex("[^a-zA-Z0-9 ]"), " ").trim()
+
+                // 2. The Guillotine: Take first 3 words max
+                val words = smartLabel.split("\\s+".toRegex())
+                if (words.size > 3) {
+                    // Fallback: Just take the first 2 meaningful words
+                    smartLabel = words.take(2).joinToString(" ")
+                }
+
+                // 3. Capitalize Title Case (Optional polish)
+                smartLabel = smartLabel.split(" ").joinToString(" ") {
+                    it.lowercase().replaceFirstChar { char -> char.uppercase() }
+                }
 
                 // Update Map
                 themes[clusterId] = smartLabel

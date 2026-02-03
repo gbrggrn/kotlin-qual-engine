@@ -92,17 +92,20 @@ object OllamaEnricher {
         val prompt = """
             <|user|>
             Task: Identify the specific THEME of these snippets.
-            Output format: A short, punchy category label (2-5 words).
+            Output format: A short, punchy category label
+            CONSTRAINT: Output strictly 1 - 3 words
             
-            BAD Examples:
-            - "Abstract of the analysis of server logs" (Too long)
-            - "The text discusses database errors" (A sentence)
-            - "Summary of Issues" (Too vague)
+            - DO NOT USE NUMBERING
+            - DO NOT WRITE FULL SENTENCES
+            - DO NOT USE QUOTES
+            - DO NOT USE PUNCTUATION
+            - DO NOT USE "and"
+            - NO FILLER WORDS
             
             GOOD Examples:
             - "Database Latency Issues"
             - "Frontend Memory Leaks"
-            - "Staff Burnout Crisis"
+            - "Staff Burnout"
             - "Q3 Budget Cuts"
 
             Snippets:

@@ -1,5 +1,6 @@
 package com.qualengine.logic
 
+import com.qualengine.model.ExplorerState
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -207,32 +208,6 @@ object ClusterUtils {
         return 1.0 - clampedSim
     }
 
-    /**
-     * Calculates the visual center (Average X, Average Y) for each cluster.
-     * Call this AFTER you have projected points to 2D.
-     */
-    fun calculate2DCentroids(
-        points: List<MathUtils.Point2D>,
-        clusterIds: IntArray
-    ): Map<Int, MathUtils.Point2D> {
-        val sums = mutableMapOf<Int, Pair<Double, Double>>()
-        val counts = mutableMapOf<Int, Int>()
-
-        for (i in points.indices) {
-            val id = clusterIds[i]
-            if (id == -1) continue // Ignore noise
-
-            val (sumX, sumY) = sums.getOrDefault(id, 0.0 to 0.0)
-            sums[id] = (sumX + points[i].x) to (sumY + points[i].y)
-            counts[id] = counts.getOrDefault(id, 0) + 1
-        }
-
-        return sums.mapValues { (id, sum) ->
-            val count = counts[id]!!
-            MathUtils.Point2D(sum.first / count, sum.second / count, -1)
-        }
-    }
-
     fun normalizePointsForClustering(points: List<MathUtils.Point2D>): List<MathUtils.Point2D> {
         if (points.isEmpty()) return points
 
@@ -316,36 +291,100 @@ object ClusterUtils {
         println("DEBUG: Adopted $adoptedCount orphans into clusters.")
     }
 
-    /**
-     * Applies "Visual Gravity" to pull points closer to their cluster center.
-     * This fixes the "PCA Scattering" effect where semantic neighbors look far apart.
-     * * @param points The 2D points from PCA.
-     * @param clusterIds The semantic cluster IDs.
-     * @param centers The calculated 2D centers of those clusters.
-     * @param strength How much to pull (0.0 = none, 0.5 = halfway to center, 1.0 = collapse to single point).
-     */
-    fun applyVisualGravity(
-        points: List<MathUtils.Point2D>,
+    fun createArchipelagoLayout(
+        rawPoints: List<MathUtils.Point2D>,
         clusterIds: IntArray,
-        centers: Map<Int, MathUtils.Point2D>,
-        strength: Double = 0.3
-    ): List<MathUtils.Point2D> {
+        ignored: Int
+    ): Pair<List<MathUtils.Point2D>, Map<Int, MathUtils.Point2D>> {
 
-        return points.mapIndexed { i, p ->
-            val id = clusterIds[i]
+        // 1. Identify Valid Clusters
+        val validClusters = clusterIds.filter { it != -1 }.distinct().sorted()
+        val count = validClusters.size
 
-            // If it's Noise (-1) or we don't have a center, leave it alone
-            if (id == -1 || !centers.containsKey(id)) {
-                return@mapIndexed p
-            }
+        if (count == 0) return Pair(rawPoints, emptyMap())
 
-            val center = centers[id]!!
+        // 2. GRID MATH (The "Muffin Tin")
+        // Calculate rows/cols to fit screen aspect ratio (roughly square or landscape)
+        val cols = Math.ceil(Math.sqrt(count.toDouble())).toInt()
+        val rows = Math.ceil(count.toDouble() / cols).toInt()
 
-            // Linear Interpolation (Lerp) towards the center
-            val newX = p.x + (center.x - p.x) * strength
-            val newY = p.y + (center.y - p.y) * strength
+        val cellWidth = 1.0 / cols
+        val cellHeight = 1.0 / rows
 
-            MathUtils.Point2D(newX, newY, p.originalIndex)
+        // ISLAND SIZE: fit inside the smaller dimension of the cell
+        // 0.45 = 90% of the half-width (leaves a 10% gap between islands)
+        val maxIslandRadius = Math.min(cellWidth, cellHeight) * 0.40
+
+        // 3. Define Island Centers
+        val islandCenters = mutableMapOf<Int, MathUtils.Point2D>()
+        validClusters.forEachIndexed { index, clusterId ->
+            val col = index % cols
+            val row = index / cols
+
+            val cx = (col * cellWidth) + (cellWidth / 2)
+            val cy = (row * cellHeight) + (cellHeight / 2)
+
+            islandCenters[clusterId] = MathUtils.Point2D(cx, cy, -1)
         }
+
+        // 4. Map Points (Gravity & Compression)
+        val newPoints = rawPoints.map { MathUtils.Point2D(it.x, it.y, it.originalIndex) }.toMutableList()
+
+        validClusters.forEach { clusterId ->
+            val indices = rawPoints.indices.filter { clusterIds[it] == clusterId }
+            if (indices.isEmpty()) return@forEach
+
+            // A. Centroid (Center of Mass)
+            val sumX = indices.sumOf { rawPoints[it].x }
+            val sumY = indices.sumOf { rawPoints[it].y }
+            val centroidX = sumX / indices.size
+            val centroidY = sumY / indices.size
+
+            // B. Furthest Point (Current Radius)
+            var currentRadius = 0.0
+            indices.forEach { i ->
+                val dx = rawPoints[i].x - centroidX
+                val dy = rawPoints[i].y - centroidY
+                val dist = Math.sqrt(dx*dx + dy*dy)
+                if (dist > currentRadius) currentRadius = dist
+            }
+            if (currentRadius < 0.001) currentRadius = 0.001
+
+            // C. Move & Compress
+            val islandCenter = islandCenters[clusterId]!!
+            val baseScale = maxIslandRadius / currentRadius
+
+            indices.forEach { i ->
+                val original = rawPoints[i]
+                val vecX = original.x - centroidX
+                val vecY = original.y - centroidY
+
+                // 1. Scale to fit
+                var finalVecX = vecX * baseScale
+                var finalVecY = vecY * baseScale
+
+                // 2. GRAVITY (Pull inwards)
+                // We pull everyone 10% closer to center to create a dense core
+                finalVecX *= 0.9
+                finalVecY *= 0.9
+
+                // 3. HARD CLAMP (The "Electric Fence")
+                // If a point is still outside the circle, drag it back to the edge.
+                val dist = Math.sqrt(finalVecX*finalVecX + finalVecY*finalVecY)
+                if (dist > maxIslandRadius) {
+                    val clampRatio = maxIslandRadius / dist
+                    finalVecX *= clampRatio
+                    finalVecY *= clampRatio
+                }
+
+                newPoints[i] = MathUtils.Point2D(
+                    islandCenter.x + finalVecX,
+                    islandCenter.y + finalVecY,
+                    original.originalIndex
+                )
+            }
+        }
+
+        return Pair(newPoints, islandCenters)
     }
 }
