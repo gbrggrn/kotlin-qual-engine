@@ -1,7 +1,7 @@
-package com.qualengine.logic
+package com.qualengine.data.pipeline
 
-import com.qualengine.model.ExplorerState
-import com.qualengine.logic.MathUtils.Point2D
+import com.qualengine.core.math.MathUtils
+import com.qualengine.data.model.ExplorerState
 import javafx.scene.input.MouseEvent
 import kotlin.math.hypot
 import kotlin.math.pow
@@ -89,7 +89,7 @@ class InputPipeline(private val state: ExplorerState) {
         val maxY = state.allPoints.maxOf { it.y }
 
         // Begin testing for hits
-        var closestAtom: Point2D? = null
+        var closestAtom: MathUtils.Point2D? = null
         var minDistance = 10.0
 
         for (point in state.allPoints) {

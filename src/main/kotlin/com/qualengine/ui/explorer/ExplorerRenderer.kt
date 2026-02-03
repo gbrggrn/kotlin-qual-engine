@@ -1,14 +1,18 @@
-package com.qualengine
+package com.qualengine.ui.explorer
 
-import com.qualengine.model.ExplorerState
-
+import com.qualengine.data.model.ExplorerState
+import javafx.geometry.VPos
 import javafx.scene.canvas.Canvas
 import javafx.scene.paint.Color
+import javafx.scene.text.Font
+import javafx.scene.text.FontWeight
+import javafx.scene.text.TextAlignment
+import kotlin.collections.iterator
 import kotlin.math.absoluteValue
 import kotlin.math.ceil
 import kotlin.math.sqrt
 
-class CanvasRenderer(private val canvas: Canvas){
+class ExplorerRenderer(private val canvas: Canvas){
     fun render(state: ExplorerState) {
         val graphics = canvas.graphicsContext2D
         val padding = 40.0
@@ -129,9 +133,9 @@ class CanvasRenderer(private val canvas: Canvas){
         }
 
         // 5. Draw Labels
-        graphics.textAlign = javafx.scene.text.TextAlignment.CENTER
-        graphics.textBaseline = javafx.geometry.VPos.CENTER
-        graphics.font = javafx.scene.text.Font.font("Arial", javafx.scene.text.FontWeight.BOLD, 14.0)
+        graphics.textAlign = TextAlignment.CENTER
+        graphics.textBaseline = VPos.CENTER
+        graphics.font = Font.font("Arial", FontWeight.BOLD, 14.0)
 
         for ((id, centerPoint) in state.clusterCenters) {
             val screenX = (centerPoint.x * drawWidth) + padding

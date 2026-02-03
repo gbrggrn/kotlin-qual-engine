@@ -1,8 +1,8 @@
-package com.qualengine.data
+package com.qualengine.data.db
 
-import com.qualengine.model.Documents
-import com.qualengine.model.Sentences
-import com.qualengine.model.Paragraphs
+import com.qualengine.data.db.model.Documents
+import com.qualengine.data.db.model.Paragraphs
+import com.qualengine.data.db.model.Sentences
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -13,9 +13,9 @@ object DatabaseFactory {
     fun init() {
         val dbFile = File("qualengine.db")
 
-        Database.connect("jdbc:sqlite:${dbFile.absolutePath}", driver = "org.sqlite.JDBC")
+        Database.Companion.connect("jdbc:sqlite:${dbFile.absolutePath}", driver = "org.sqlite.JDBC")
 
-        transaction{
+        transaction {
             // Check tables exist - otherwise CREATE
             SchemaUtils.create(Documents, Sentences, Paragraphs)
         }

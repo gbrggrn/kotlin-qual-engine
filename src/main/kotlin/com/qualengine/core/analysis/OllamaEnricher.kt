@@ -1,4 +1,4 @@
-package com.qualengine.data
+package com.qualengine.core.analysis
 
 import org.json.JSONArray
 import org.json.JSONObject
@@ -6,6 +6,8 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.net.http.HttpTimeoutException
+import java.time.Duration
 
 object OllamaEnricher {
 
@@ -55,7 +57,7 @@ object OllamaEnricher {
             .uri(URI.create(OLLAMA_URL))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
-            .timeout(java.time.Duration.ofSeconds(60)) // Hard timeout if too slow execution (10s)
+            .timeout(Duration.ofSeconds(60)) // Hard timeout if too slow execution (10s)
             .build()
 
         return try {
@@ -73,7 +75,7 @@ object OllamaEnricher {
             // Clean result
             responseJson.getString("response").trim().removeSurrounding("\"")
 
-        } catch (e: java.net.http.HttpTimeoutException) {
+        } catch (e: HttpTimeoutException) {
             println("[Enricher Timeout]: AI took too long. Skipping.")
             current
         } catch (e: Exception) {
@@ -132,7 +134,7 @@ object OllamaEnricher {
             .uri(URI.create(OLLAMA_URL))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
-            .timeout(java.time.Duration.ofSeconds(30))
+            .timeout(Duration.ofSeconds(30))
             .build()
 
         return try {

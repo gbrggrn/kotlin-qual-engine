@@ -1,4 +1,4 @@
-package com.qualengine.logic
+package com.qualengine.core.analysis
 
 object SemanticCompressor {
     private val STOP_WORDS = setOf (

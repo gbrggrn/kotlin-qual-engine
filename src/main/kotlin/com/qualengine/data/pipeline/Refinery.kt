@@ -1,11 +1,11 @@
-package com.qualengine
+package com.qualengine.data.pipeline
 
-import com.qualengine.data.OllamaClient
-import com.qualengine.data.OllamaEnricher
-import com.qualengine.logic.SemanticCompressor
-import com.qualengine.model.Documents
-import com.qualengine.model.Moleculizer
-import com.qualengine.model.Paragraphs
+import com.qualengine.core.analysis.OllamaEnricher
+import com.qualengine.core.analysis.SemanticCompressor
+import com.qualengine.data.client.OllamaClient
+import com.qualengine.data.db.model.Documents
+import com.qualengine.core.analysis.Moleculizer
+import com.qualengine.data.db.model.Paragraphs
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.File
@@ -23,7 +23,7 @@ object Refinery {
 
         // Register parent document in db
         transaction {
-            Documents.insert{
+            Documents.insert {
                 it[this.id] = docId
                 it[content] = rawText.take(100) + "..." // Keep for preview
                 it[origin] = file.name

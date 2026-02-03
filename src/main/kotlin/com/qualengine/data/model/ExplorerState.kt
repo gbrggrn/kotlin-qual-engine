@@ -1,10 +1,12 @@
-package com.qualengine.model
+package com.qualengine.data.model
 
-import com.qualengine.logic.MathUtils.Point2D
+import com.qualengine.core.math.MathUtils
+import kotlin.math.abs
+import kotlin.math.min
 
 class ExplorerState {
     // Atoms data
-    var allPoints: List<Point2D> = emptyList()
+    var allPoints: List<MathUtils.Point2D> = emptyList()
     var pointContents: List<String> = emptyList()
 
     // Viewport
@@ -12,8 +14,8 @@ class ExplorerState {
     var height: Double = 0.0
 
     // Interaction
-    var hoveredPoint: Point2D? = null
-    var selectedPoint = mutableSetOf<Point2D>()
+    var hoveredPoint: MathUtils.Point2D? = null
+    var selectedPoint = mutableSetOf<MathUtils.Point2D>()
 
     //Marquee selection
     var isDragging: Boolean = false
@@ -24,7 +26,7 @@ class ExplorerState {
 
     // Clustering data
     var pointClusterIds: IntArray = IntArray(0)
-    var clusterCenters: Map<Int, Point2D> = emptyMap()
+    var clusterCenters: Map<Int, MathUtils.Point2D> = emptyMap()
     var clusterThemes: MutableMap<Int, String> = mutableMapOf()
 
     // Clear transient state
@@ -32,14 +34,13 @@ class ExplorerState {
         if (!isDragging)
             return null
 
-        val minX = kotlin.math.min(dragStartX, dragCurrentX)
-        val minY = kotlin.math.min(dragStartY, dragCurrentY)
-        val w = kotlin.math.abs(dragCurrentX - dragStartX)
-        val h = kotlin.math.abs(dragCurrentY - dragStartY)
+        val minX = min(dragStartX, dragCurrentX)
+        val minY = min(dragStartY, dragCurrentY)
+        val w = abs(dragCurrentX - dragStartX)
+        val h = abs(dragCurrentY - dragStartY)
 
         return Bounds(minX, minY, w, h)
     }
 
     data class Bounds(val x: Double, val y: Double, val w: Double, val h: Double)
 }
-

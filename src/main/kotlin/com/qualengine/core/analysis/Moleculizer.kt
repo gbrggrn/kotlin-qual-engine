@@ -1,5 +1,6 @@
-package com.qualengine.model
+package com.qualengine.core.analysis
 
+import com.qualengine.data.model.ParagraphMolecule
 import java.util.regex.Pattern
 
 object Moleculizer {

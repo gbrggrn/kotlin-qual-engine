@@ -1,27 +1,40 @@
-package com.qualengine
+package com.qualengine.ui.refinery
 
-import com.qualengine.model.RefineryJob
+import com.qualengine.data.pipeline.Refinery
+import com.qualengine.data.pipeline.RefineryJob
 import javafx.application.Platform
 import javafx.collections.FXCollections
 import javafx.collections.transformation.FilteredList
 import javafx.fxml.FXML
-import javafx.scene.control.*
+import javafx.scene.control.Button
+import javafx.scene.control.TableCell
+import javafx.scene.control.TableColumn
+import javafx.scene.control.TableView
+import javafx.scene.control.TextField
 import javafx.scene.control.cell.ProgressBarTableCell
 import javafx.stage.FileChooser
 import kotlin.concurrent.thread
 
 class RefineryController {
 
-    @FXML private lateinit var jobTable: TableView<RefineryJob>
-    @FXML private lateinit var txtFilter: TextField
-    @FXML private lateinit var btnProcess: Button
+    @FXML
+    private lateinit var jobTable: TableView<RefineryJob>
+    @FXML
+    private lateinit var txtFilter: TextField
+    @FXML
+    private lateinit var btnProcess: Button
 
     // Cols
-    @FXML private lateinit var colStatus: TableColumn<RefineryJob, String>
-    @FXML private lateinit var colName: TableColumn<RefineryJob, String>
-    @FXML private lateinit var colType: TableColumn<RefineryJob, String>
-    @FXML private lateinit var colProgress: TableColumn<RefineryJob, Double>
-    @FXML private lateinit var colAction: TableColumn<RefineryJob, Void>
+    @FXML
+    private lateinit var colStatus: TableColumn<RefineryJob, String>
+    @FXML
+    private lateinit var colName: TableColumn<RefineryJob, String>
+    @FXML
+    private lateinit var colType: TableColumn<RefineryJob, String>
+    @FXML
+    private lateinit var colProgress: TableColumn<RefineryJob, Double>
+    @FXML
+    private lateinit var colAction: TableColumn<RefineryJob, Void>
 
     // Lists
     private val masterList = FXCollections.observableArrayList<RefineryJob>()
@@ -138,7 +151,7 @@ class RefineryController {
 
                 } catch (t: Throwable) { // CATCH EVERYTHING (Errors + Exceptions)
 
-                    val errorMessage = when(t) {
+                    val errorMessage = when (t) {
                         is OutOfMemoryError -> "OOM Error (Restart App)"
                         else -> "Error: ${t.message?.take(20) ?: "Unknown"}"
                     }

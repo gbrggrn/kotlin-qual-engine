@@ -1,4 +1,4 @@
-package com.qualengine
+package com.qualengine.app
 
 import javafx.application.Application
 import java.io.File

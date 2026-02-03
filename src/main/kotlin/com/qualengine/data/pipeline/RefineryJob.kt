@@ -1,6 +1,5 @@
-package com.qualengine.model
+package com.qualengine.data.pipeline
 
-import com.sun.jdi.Value
 import javafx.beans.property.SimpleDoubleProperty
 import javafx.beans.property.SimpleStringProperty
 import java.io.File

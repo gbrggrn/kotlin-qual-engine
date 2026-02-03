@@ -1,4 +1,4 @@
-package com.qualengine.model
+package com.qualengine.data.db.model
 
 import org.jetbrains.exposed.sql.Table
 

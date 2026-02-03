@@ -1,5 +1,6 @@
-package com.qualengine.model
+package com.qualengine.core.analysis
 
+import com.qualengine.data.model.SentenceAtom
 import java.util.regex.Pattern
 
 object Atomizer {

@@ -1,4 +1,4 @@
-package com.qualengine.data
+package com.qualengine.data.client
 
 import java.net.URI
 import java.net.http.HttpClient

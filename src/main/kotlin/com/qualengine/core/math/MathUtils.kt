@@ -1,6 +1,6 @@
-package com.qualengine.logic
+package com.qualengine.core.math
 
-import com.qualengine.model.ExplorerState
+import kotlin.collections.iterator
 import kotlin.math.pow
 import kotlin.math.sqrt
 

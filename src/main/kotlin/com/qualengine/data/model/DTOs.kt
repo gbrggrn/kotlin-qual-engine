@@ -1,4 +1,4 @@
-package com.qualengine.model
+package com.qualengine.data.model
 
 import java.util.UUID
 

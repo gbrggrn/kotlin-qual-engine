@@ -1,4 +1,4 @@
-package com.qualengine
+package com.qualengine.ui
 
 import javafx.fxml.FXML
 import javafx.fxml.FXMLLoader
@@ -7,9 +7,12 @@ import javafx.scene.control.Button
 import javafx.scene.layout.StackPane
 
 class MainController {
-    @FXML private lateinit var contentArea: StackPane
-    @FXML private lateinit var btnRefinery: Button
-    @FXML private lateinit var btnExplorer: Button
+    @FXML
+    private lateinit var contentArea: StackPane
+    @FXML
+    private lateinit var btnRefinery: Button
+    @FXML
+    private lateinit var btnExplorer: Button
 
     // Cache view
     private var refineryView: Parent? = null
@@ -25,7 +28,7 @@ class MainController {
         updateActiveButton(btnRefinery)
 
         if (refineryView == null) {
-            val loader = FXMLLoader(javaClass.getResource("refinery-view.fxml"))
+            val loader = FXMLLoader(javaClass.getResource("/com/qualengine/refinery-view.fxml"))
             refineryView = loader.load()
         }
         setContent(refineryView!!)
@@ -36,7 +39,7 @@ class MainController {
         updateActiveButton(btnExplorer)
 
         if (explorerView == null) {
-            var loader = FXMLLoader(javaClass.getResource("explorer-view.fxml"))
+            var loader = FXMLLoader(javaClass.getResource("/com/qualengine/explorer-view.fxml"))
             explorerView = loader.load()
         }
         setContent(explorerView!!)

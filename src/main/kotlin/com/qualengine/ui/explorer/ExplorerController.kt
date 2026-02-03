@@ -1,38 +1,45 @@
-package com.qualengine
+package com.qualengine.ui.explorer
 
-import com.qualengine.data.OllamaEnricher
-import com.qualengine.logic.ClusterUtils
-import com.qualengine.logic.MathUtils
-import com.qualengine.logic.InputPipeline
-import com.qualengine.model.ExplorerState
-import com.qualengine.model.Paragraphs
+import com.qualengine.core.analysis.OllamaEnricher
+import com.qualengine.core.math.ClusterUtils
+import com.qualengine.core.math.MathUtils
+import com.qualengine.data.pipeline.InputPipeline
+import com.qualengine.data.model.ExplorerState
+import com.qualengine.data.db.model.Paragraphs
 import javafx.application.Platform
 import javafx.fxml.FXML
 import javafx.scene.canvas.Canvas
+import javafx.scene.control.Label
+import javafx.scene.control.TextArea
 import javafx.scene.layout.StackPane
 import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
+import javafx.scene.text.TextAlignment
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
-import javafx.scene.control.Label
-import javafx.scene.control.TextArea
 import kotlin.concurrent.thread
 
 class ExplorerController {
     // UI variables
-    @FXML private lateinit var mapContainer: StackPane
-    @FXML private lateinit var mapCanvas: Canvas
-    @FXML private lateinit var loadingBox: VBox
-    @FXML private lateinit var analyzingStatusLabel: Label
+    @FXML
+    private lateinit var mapContainer: StackPane
+    @FXML
+    private lateinit var mapCanvas: Canvas
+    @FXML
+    private lateinit var loadingBox: VBox
+    @FXML
+    private lateinit var analyzingStatusLabel: Label
 
     // MouseEvent handling variables
     private val explorerState = ExplorerState()
-    private lateinit var renderer: CanvasRenderer
+    private lateinit var renderer: ExplorerRenderer
     private lateinit var pipeline: InputPipeline
 
     // Details side view variables
-    @FXML private lateinit var detailsBox: VBox
-    @FXML private lateinit var txtContext: TextArea
+    @FXML
+    private lateinit var detailsBox: VBox
+    @FXML
+    private lateinit var txtContext: TextArea
     private val numberOfDetailsFor = 50
 
     // Cache points so we can redraw on resize without recalculating PCA
@@ -41,7 +48,7 @@ class ExplorerController {
     @FXML
     fun initialize() {
         // Initialize logic classes to handle mouse events
-        renderer = CanvasRenderer(mapCanvas)
+        renderer = ExplorerRenderer(mapCanvas)
         pipeline = InputPipeline(explorerState)
 
         // Make canvas resizable
@@ -104,7 +111,7 @@ class ExplorerController {
             val placeholder = Label("Select dots on the map to view details.\n\nHold SHIFT to select multiple.")
             placeholder.isWrapText = true
             placeholder.style = "-fx-text-fill: #95a5a6; -fx-font-style: italic; -fx-font-size: 14px;"
-            placeholder.textAlignment = javafx.scene.text.TextAlignment.CENTER
+            placeholder.textAlignment = TextAlignment.CENTER
             placeholder.maxWidth = Double.MAX_VALUE
             detailsBox.children.add(placeholder)
             return
