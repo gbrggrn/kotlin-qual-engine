@@ -156,10 +156,12 @@ class ExplorerController {
             Platform.runLater { analyzingStatusLabel.text = "Projecting 2D Map..." }
             val pcaPoints = PCA.performPCA(clusteredPoints)
 
+            val unitSquarePoints = LayoutEngine.normalizeToUnitSquare(pcaPoints)
+
             // D. LAYOUT (Archipelago)
             // Calculates gravity and island positions
             val (finalPoints, islandCenters) = LayoutEngine.createArchipelagoLayout(
-                pcaPoints,
+                unitSquarePoints,
                 clusterResult.clusterIds
             )
 
