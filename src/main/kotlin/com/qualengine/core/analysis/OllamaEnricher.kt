@@ -57,7 +57,7 @@ object OllamaEnricher {
             .uri(URI.create(OLLAMA_URL))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
-            .timeout(Duration.ofSeconds(60)) // Hard timeout if too slow execution (10s)
+            .timeout(Duration.ofSeconds(60)) // Hard timeout if too slow execution
             .build()
 
         return try {
@@ -134,7 +134,7 @@ object OllamaEnricher {
             .uri(URI.create(OLLAMA_URL))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
-            .timeout(Duration.ofSeconds(30))
+            .timeout(Duration.ofSeconds(50))
             .build()
 
         return try {

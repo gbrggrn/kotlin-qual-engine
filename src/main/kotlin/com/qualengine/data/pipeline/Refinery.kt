@@ -30,11 +30,11 @@ object Refinery {
                 it[timestamp] = System.currentTimeMillis()
             }
         }
-        onProgress(-1.0, "Moleculizing...")
+        onProgress(-1.0, "Splitting...")
 
-        // Moleculize (split by paragraph)
-        val molecules = ParagraphSplitter.split(docId, rawText)
-        val total = molecules.size
+        // Split by paragraphs
+        val paragraphs = ParagraphSplitter.split(docId, rawText)
+        val total = paragraphs.size
         onProgress(0.0, "Enriching & Vectorizing $total paragraphs...")
 
         // Context "memory" cache
@@ -45,7 +45,7 @@ object Refinery {
 
         var lastReportedProgress = 0.0
 
-        for ((index, molecule) in molecules.withIndex()) {
+        for ((index, paragraph) in paragraphs.withIndex()) {
             //Chill out a bit to not completely overwhelm the app thread
             Thread.sleep(100)
 
@@ -53,7 +53,7 @@ object Refinery {
             val compressedContext = SemanticCompressor.compress(previousContext)
 
             // Send text to enricher for semantic summarization
-            val enrichedText = OllamaEnricher.enrichParagraph(molecule.content, previousContext)
+            val enrichedText = OllamaEnricher.enrichParagraph(paragraph.content, compressedContext)
 
             // Update "memory" cache
             previousContext = enrichedText
@@ -64,10 +64,10 @@ object Refinery {
             if (vector.isNotEmpty()){
                 transaction {
                     Paragraphs.insert {
-                        it[Paragraphs.id] = molecule.id
-                        it[Paragraphs.docId] = molecule.docId
-                        it[Paragraphs.content] = molecule.content
-                        it[Paragraphs.index] = molecule.index
+                        it[Paragraphs.id] = paragraph.id
+                        it[Paragraphs.docId] = paragraph.docId
+                        it[Paragraphs.content] = paragraph.content
+                        it[Paragraphs.index] = paragraph.index
                         it[Paragraphs.vector] = vector.joinToString(",")
                     }
                 }

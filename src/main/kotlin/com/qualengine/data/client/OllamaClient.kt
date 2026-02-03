@@ -9,16 +9,22 @@ object OllamaClient {
     // Ollama url
     private const val ENDPOINT = "http://localhost:11434/api/embeddings"
 
-    private const val MODEL_NAME = "all-minilm"
+    private const val MODEL_NAME = "nomic-embed-text"
 
     private val client = HttpClient.newHttpClient()
 
     fun getVector(text: String): List<Double> {
-        val cleanText = text.replace("\"", "\\\"").replace("\n", " ")
+        val cleanText = sanitizeForJson(text)
+
+        val safePrompt = if (cleanText.length > 2000) {
+            cleanText.take(2000) + "..."
+        } else {
+            cleanText
+        }
 
         val jsonPayload = """ {
             "model": "$MODEL_NAME",
-            "prompt": "$cleanText"
+            "prompt": "$safePrompt"
             }""".trimIndent()
 
         val request = HttpRequest.newBuilder()
@@ -58,5 +64,14 @@ object OllamaClient {
             println("Error: ${e.message}")
             return emptyList()
         }
+    }
+
+    private fun sanitizeForJson(input: String): String {
+        return input
+            .replace("\\", "\\\\") // Escape backslashes first!
+            .replace("\"", "\\\"") // Escape quotes
+            .replace("\n", "\\n")  // Escape newlines
+            .replace("\r", "\\r")  // Escape carriage returns
+            .replace("\t", "\\t")  // Escape tabs
     }
 }
