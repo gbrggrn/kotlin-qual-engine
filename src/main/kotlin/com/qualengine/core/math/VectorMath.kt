@@ -41,4 +41,19 @@ object VectorMath {
         }
         return sqrt(sum)
     }
+
+    fun blend(child: DoubleArray, parent: DoubleArray, childWeight: Double = 0.8): DoubleArray {
+        // Check dimensions first (now: nomic-embed-text 768)
+        if (child.size != parent.size)
+            return child
+
+        val parentWeight = 1.0 - childWeight
+        val result = DoubleArray(child.size)
+
+        for (i in child.indices) {
+            result[i] = (child[i] * childWeight) + (parent[i] * parentWeight)
+        }
+
+        return result
+    }
 }

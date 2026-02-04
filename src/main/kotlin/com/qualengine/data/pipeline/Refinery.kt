@@ -12,7 +12,7 @@ import java.io.File
 import java.util.UUID
 
 object Refinery {
-
+    
     fun ingestFile (file: File, onProgress: (Double, String) -> Unit) {
         onProgress(-1.0, "Reading file...")
 
