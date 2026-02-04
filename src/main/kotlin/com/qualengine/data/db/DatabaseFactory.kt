@@ -6,6 +6,8 @@ import com.qualengine.data.db.model.Sentences
 import com.qualengine.data.model.VectorPoint
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.File
@@ -27,7 +29,6 @@ object DatabaseFactory {
 
     /**
      * Fetches all rows and converts them directly into the domain model.
-     * This is the "Entry Point" for your pipeline.
      */
     fun getAllVectorPoints(): List<VectorPoint> {
         return transaction {
@@ -48,7 +49,9 @@ object DatabaseFactory {
                     // Defaults (will be calculated later by pipeline)
                     projectedX = 0.0,
                     projectedY = 0.0,
-                    clusterId = -1
+                    clusterId = -1,
+                    layer = 2,
+                    parentId = null
                 )
             }
         }
@@ -72,5 +75,47 @@ object DatabaseFactory {
             println("Error parsing vector: ${e.message}")
             return DoubleArray(0)
         }
+    }
+
+    fun getParagraphPoints(): List<VectorPoint> {
+        return transaction {
+            Paragraphs.selectAll().map {
+                val rawString = it[Paragraphs.vector] ?: ""
+                val vectorArray = parseEmbedding(rawString)
+                VectorPoint(
+                    id = it[Paragraphs.id],
+                    embedding = vectorArray,
+                    metaData = it[Paragraphs.content],
+                    layer = 2,
+                    parentId = it[Paragraphs.docId]
+                )
+            }
+        }
+    }
+
+    fun getSentencePoints(parentId: String? = null): List<VectorPoint> {
+        return transaction {
+            val query =
+                if (parentId == null) {
+                Sentences.selectAll().where { Sentences.paragraphId eq parentId }
+            } else {
+                Sentences.selectAll()
+                }
+
+            query.map {
+                VectorPoint(
+                    id = it[Sentences.id],
+                    embedding = DoubleArray(0), // TODO: Change when sentence vectorization is active
+                    metaData = it[Sentences.content],
+                    layer = 1,
+                    parentId = it[Sentences.paragraphId]
+                )
+            }
+        }
+    }
+
+    fun getDocumentPoints(): List<VectorPoint> {
+        // TODO: Implement layer 3 retrieval
+        return emptyList()
     }
 }

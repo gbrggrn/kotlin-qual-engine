@@ -17,6 +17,11 @@ data class VectorPoint(
         other as VectorPoint
         if (id != other.id) return false // Strings compare fine
         if (!embedding.contentEquals(other.embedding)) return false
+        if (projectedX != other.projectedX) return false
+        if (projectedY != other.projectedY) return false
+        if (clusterId != other.clusterId) return false
+        if (layer != other.layer) return false
+        if (parentId != other.parentId) return false
         return true
     }
 
