@@ -9,7 +9,7 @@ import java.util.regex.Pattern
 object ParagraphSplitter {
 
     // Hopefully cross-platform regex
-    private val PARAGRAPH_SPLITTER = Pattern.compile("""(\r?\n\s*){2,}""")
+    private val PARAGRAPH_PATTERN = Pattern.compile("""(\r?\n\s*){2,}""")
 
     // --- This method splits strings into a list of paragraphs
     fun split(docId: String, text: String): List<Paragraph> {
@@ -17,7 +17,7 @@ object ParagraphSplitter {
             return emptyList()
 
         // Split by regex
-        val rawParagraphs = text.split(PARAGRAPH_SPLITTER.toRegex())
+        val rawParagraphs = text.split(PARAGRAPH_PATTERN.toRegex())
 
         // Transform splits into list of paragraphs
         val paragraphList = mutableListOf<Paragraph>()

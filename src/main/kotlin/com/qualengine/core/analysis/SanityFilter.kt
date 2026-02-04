@@ -10,6 +10,32 @@ object SanityFilter {
 
     fun evaluate(text: String): SanityStatus {
         val trimmed = text.trim()
+        if (trimmed.length < 5)
+            return SanityStatus.NOISE
+
+        // Statistical fingerprint
+        val total = trimmed.length
+        val letters = trimmed.count { it.isLetter() }
+        val numbers = trimmed.count { it.isDigit() }
+        val whitespace = trimmed.count { it.isWhitespace() }
+        val symbols = total - letters - numbers - whitespace
+
+        // Calculate weights
+        val letterRatio = letters.toDouble() / total
+        val symbolRatio = symbols.toDouble() / total
+
+        return when {
+            // --- Rule 1: If 20% is symbols it's probably noise
+            symbolRatio > 0.20 -> SanityStatus.NOISE
+            // --- Rule 2: If there are too few letters, there is probably little meaning
+            letterRatio < 0.50 -> SanityStatus.QUARANTINE
+            // --- Rule 3: Test check for metadata TODO: Does this work??
+            total < 50 && trimmed.contains(":") -> SanityStatus.QUARANTINE
+            else -> SanityStatus.CLEAN
+        }
+    }
+    /*fun evaluate(text: String): SanityStatus {
+        val trimmed = text.trim()
 
         // Sort out noise TODO: Extend this?
         if (trimmed.matches(Regex("^[\\-_=]{3,}$"))) {
@@ -39,5 +65,5 @@ object SanityFilter {
             trimmed.split(" ").size < 3 -> SanityStatus.QUARANTINE // Too short to be thought
             else -> SanityStatus.CLEAN // Useful data
         }
-    }
+    }*/
 }

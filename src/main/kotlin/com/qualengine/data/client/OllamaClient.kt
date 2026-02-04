@@ -13,11 +13,11 @@ object OllamaClient {
 
     private val client = HttpClient.newHttpClient()
 
-    fun getVector(text: String): List<Double> {
+    fun getVector(text: String, tokenAmount: Int): DoubleArray {
         val cleanText = sanitizeForJson(text)
 
-        val safePrompt = if (cleanText.length > 2000) {
-            cleanText.take(2000) + "..."
+        val safePrompt = if (cleanText.length > tokenAmount) {
+            cleanText.take(tokenAmount) + "..."
         } else {
             cleanText
         }
@@ -39,30 +39,28 @@ object OllamaClient {
             if (response.statusCode() != 200) {
                 println("Ollama error! Code: ${response.statusCode()}")
                 println("Response body: ${response.body()}")
-
-                return emptyList()
+                return DoubleArray(0)
             }
 
             val body = response.body()
-
             val startMarker = "\"embedding\":["
             val startIndex = body.indexOf(startMarker)
-
             if (startIndex == -1)
-                return emptyList()
+                return DoubleArray(0)
 
             val contentStart = startIndex + startMarker.length
             val contentEnd = body.indexOf("]", contentStart)
-
             val vectorString = body.substring(contentStart, contentEnd)
 
-            return vectorString.split(",").map {
-                it.trim().toDouble()
-            }
+            // --- Convert to DoubleArray
+            return vectorString
+                .split(",")
+                .map { it.trim().toDouble() }
+                .toDoubleArray()
         } catch (e: Exception) {
             println("Connection failed - is Ollama running?")
             println("Error: ${e.message}")
-            return emptyList()
+            return DoubleArray(0)
         }
     }
 

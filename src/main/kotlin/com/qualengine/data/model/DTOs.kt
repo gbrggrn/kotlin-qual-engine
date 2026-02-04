@@ -3,9 +3,10 @@ package com.qualengine.data.model
 import com.qualengine.core.analysis.SanityStatus
 import java.util.UUID
 
-data class SentenceAtom(
+data class Sentence(
     val id: String = UUID.randomUUID().toString(),
     val docId: String,
+    val paragraphId: String,
     val content: String,
     val index: Int
 )
