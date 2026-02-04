@@ -7,7 +7,7 @@ data class VectorPoint(
     val projectedY: Double = 0.0,
     val clusterId: Int = -1,
     val metaData: String,
-    val layer: Int,
+    val layer: Int, // 1: Sentence, 2: Paragraph 3: Document
     val parentId: String?
 ) {
     // Update hashCode/equals if you overrode them (String handles equality natively)
