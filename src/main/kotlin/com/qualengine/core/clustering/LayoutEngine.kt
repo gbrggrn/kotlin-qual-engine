@@ -78,35 +78,17 @@ object LayoutEngine {
 
             // C. Move & Compress
             val islandCenter = islandCenters[clusterId]!!
-            val baseScale = maxIslandRadius / currentRadius
+            val semanticScale = 0.15
 
             indices.forEach { i ->
                 val original = rawPoints[i]
 
-                // Vector from Local Cluster Centroid -> Point
-                val vecX = original.projectedX - centroidX
-                val vecY = original.projectedY - centroidY
+                val offsetX = (original.projectedX - centroidX) * semanticScale
+                val offsetY = (original.projectedY - centroidY) * semanticScale
 
-                // 1. Scale to fit
-                var finalVecX = vecX * baseScale
-                var finalVecY = vecY * baseScale
-
-                // 2. GRAVITY (Pull inwards 10%)
-                finalVecX *= 0.9
-                finalVecY *= 0.9
-
-                // 3. HARD CLAMP
-                val dist = sqrt(finalVecX * finalVecX + finalVecY * finalVecY)
-                if (dist > maxIslandRadius) {
-                    val clampRatio = maxIslandRadius / dist
-                    finalVecX *= clampRatio
-                    finalVecY *= clampRatio
-                }
-
-                // 4. Use .copy() to update the point
                 newPoints[i] = original.copy(
-                    projectedX = islandCenter.projectedX + finalVecX,
-                    projectedY = islandCenter.projectedY + finalVecY
+                    projectedX = islandCenter.projectedX + offsetX,
+                    projectedY = islandCenter.projectedY + offsetY
                 )
             }
         }

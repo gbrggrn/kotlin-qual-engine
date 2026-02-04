@@ -12,6 +12,7 @@ import kotlin.math.abs
 import kotlin.math.absoluteValue
 import kotlin.math.ceil
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 class ExplorerRenderer(private val canvas: Canvas){
@@ -97,7 +98,53 @@ class ExplorerRenderer(private val canvas: Canvas){
                 }
                 // Normal
                 else -> {
+                    val sourceId = point.parentId ?: "Unknown"
+                    val layer = point.layer
+
+                    val hue = (abs(sourceId.hashCode()) % 360).toDouble()
+                    val sourceBaseColor = Color.hsb(hue, 0.7, 0.9)
+
+                    val baseSize =
+                        if (layer == 2)
+                            6.5
+                    else
+                        3.5
+
+                    var finalDotSize = baseSize
                     val clusterId = point.clusterId
+
+                    if (clusterId != -1 && state.clusterCenters.containsKey(clusterId)) {
+                        val center = state.clusterCenters[clusterId]!!
+                        val centerX = (center.projectedX * drawWidth) + padding
+                        val centerY = (center.projectedY * drawHeight) + padding
+
+                        val dist = sqrt((screenX - centerX).pow(2) + (screenY - centerY).pow(2))
+                        val normalizedDist = (dist / radiusPx).coerceIn(0.0, 1.0)
+
+                        finalDotSize = baseSize - (normalizedDist * (baseSize * 0.5))
+                    }
+
+                    if (layer == 2) {
+                        // Paragraphs
+                        graphics.fill = sourceBaseColor
+                        graphics.fillOval(
+                            screenX - (finalDotSize / 2),
+                            screenY - (finalDotSize / 2),
+                            finalDotSize,
+                            finalDotSize
+                        )
+
+                        // White rim for paragraphs
+                        graphics.stroke = Color.rgb(255, 255, 255)
+                        graphics.lineWidth = 1.0
+                        graphics.strokeOval(
+                            screenX - (finalDotSize / 2),
+                            screenY - (finalDotSize / 2),
+                            finalDotSize,
+                            finalDotSize
+                        )
+                    }
+                    /*val clusterId = point.clusterId
 
                     if (clusterId != -1 && state.clusterCenters.containsKey(clusterId)) {
 
@@ -123,12 +170,11 @@ class ExplorerRenderer(private val canvas: Canvas){
                         graphics.fill = clusterPalette[colorIndex]
 
                         // Draw centered
-                        graphics.fillOval(screenX - (dotSize / 2), screenY - (dotSize / 2), dotSize, dotSize)
-                    }
+                        graphics.fillOval(screenX - (dotSize / 2), screenY - (dotSize / 2), dotSize, dotSize)*/
                     else {
                         // Background Stars (Faint, tiny, uniform)
-                        graphics.fill = Color.rgb(200, 200, 200, 0.15)
-                        graphics.fillOval(screenX - 1, screenY - 1, 2.0, 2.0)
+                        graphics.fill = sourceBaseColor.deriveColor(0.0, 1.0, 0.8, 0.6)
+                        graphics.fillOval(screenX - (finalDotSize / 2), screenY - (finalDotSize / 2), finalDotSize, finalDotSize)
                     }
                 }
             }
