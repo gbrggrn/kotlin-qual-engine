@@ -67,8 +67,9 @@ object PCA {
     // --- HELPER: The "Magic" Math Loop ---
     // Finds the dominant eigenvector without building a giant covariance matrix.
     private fun powerIteration(data: List<DoubleArray>, dimensions: Int): DoubleArray {
-        // 1. Start with a random vector
-        val candidate = DoubleArray(dimensions) { Random.nextDouble() - 0.5 }
+        // 1. Start with fixed seed (deterministic start)
+        val fixedRandom = kotlin.random.Random(42)
+        val candidate = DoubleArray(dimensions) { fixedRandom.nextDouble() - 0.5 }
         normalize(candidate)
 
         // 2. Iterate until it stops changing (converges)
