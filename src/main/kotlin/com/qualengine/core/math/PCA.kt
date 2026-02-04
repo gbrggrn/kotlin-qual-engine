@@ -1,6 +1,5 @@
 package com.qualengine.core.math
 
-import com.qualengine.core.math.VectorMath
 import com.qualengine.data.model.VectorPoint
 import kotlin.random.Random
 

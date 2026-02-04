@@ -6,7 +6,9 @@ data class VectorPoint(
     val projectedX: Double = 0.0,
     val projectedY: Double = 0.0,
     val clusterId: Int = -1,
-    val metaData: String
+    val metaData: String,
+    val layer: Int,
+    val parentId: String?
 ) {
     // Update hashCode/equals if you overrode them (String handles equality natively)
     override fun equals(other: Any?): Boolean {
