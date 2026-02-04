@@ -98,19 +98,19 @@ class ExplorerController {
     fun loadDataFromDb() {
         loadingBox.isVisible = true
         analyzingStatusLabel.isVisible = true
-        analyzingStatusLabel.text = "Loading from Database..."
+        analyzingStatusLabel.text = "Loading thematic layers..."
 
         thread(start = true) {
             // 1. Fetch clean objects from Factory
-            val points = DatabaseFactory.getAllVectorPoints()
+            val points = DatabaseFactory.getParagraphPoints() // TODO: Implement switching between layers = new calls
 
             Platform.runLater {
                 if (points.isEmpty()) {
-                    analyzingStatusLabel.text = "No data found."
+                    analyzingStatusLabel.text = "No thematic data found."
                     loadingBox.isVisible = false
                 } else {
                     cachedPoints = points
-                    analyzingStatusLabel.text = "Loaded ${points.size} tickets."
+                    analyzingStatusLabel.text = "Loaded ${points.size} paragraphs."
                     // Auto-start analysis
                     runAnalysisPipeline()
                 }

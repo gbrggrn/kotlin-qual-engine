@@ -43,7 +43,10 @@ object LayoutEngine {
                 projectedX = cx,
                 projectedY = cy,
                 clusterId = clusterId,
-                metaData = ""
+                metaData = "",
+                layer = 2, // TODO: Implement layer logic for this "anchor" when layer selection has been implemented
+                parentId = null
+
             )
         }
 
