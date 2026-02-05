@@ -3,12 +3,15 @@ package com.qualengine.data.pipeline
 import javafx.scene.input.MouseEvent
 import com.qualengine.core.AnalysisContext
 import com.qualengine.data.model.VectorPoint
+import com.qualengine.ui.explorer.ExplorerController
+import com.qualengine.ui.explorer.ViewMode
 import kotlin.math.hypot
 import kotlin.math.sqrt
 import kotlin.math.pow
 
 class InputPipeline(
-    private val context: AnalysisContext
+    private val context: AnalysisContext,
+    private val explorerController: ExplorerController
 ) {
     private val PADDING = 40.0
     private val DRAG_THRESHOLD = 5.0
@@ -119,8 +122,13 @@ class InputPipeline(
 
     fun handleClick(event: MouseEvent) {
         val current = context.state
-        if (current.isDragging && isRealDrag) return // Ignore click if we just finished a drag
+        // Ignore click if drag just finished
+        if (current.isDragging && isRealDrag)
+            return
 
+        if (event.clickCount == 2 && current.hoveredPoint != null) {
+            explorerController.switchView(ViewMode.SELECTION)
+        }
         // Toggle selection if hovering
         current.hoveredPoint?.let { point ->
             // Create a new set based on the old one

@@ -1,5 +1,6 @@
 package com.qualengine.ui.explorer
 
+import com.qualengine.app.DependencyRegistry
 import com.qualengine.core.AnalysisContext
 import javafx.application.Platform
 import javafx.fxml.FXML
@@ -9,72 +10,47 @@ import javafx.scene.control.TextArea
 import javafx.scene.layout.StackPane
 import javafx.scene.layout.VBox
 import javafx.scene.text.TextAlignment
-import com.qualengine.core.analysis.OllamaEnricher
-import com.qualengine.core.clustering.ClusterRefiner
 import com.qualengine.core.clustering.DBSCAN
-import com.qualengine.core.clustering.LayoutEngine
 import com.qualengine.core.math.PCA
-import com.qualengine.data.client.OllamaClient
-import com.qualengine.data.db.DatabaseFactory
 import com.qualengine.data.model.VectorPoint
 import com.qualengine.data.pipeline.InputPipeline
-import org.jetbrains.exposed.sql.Database
-import javax.swing.text.View
-import javax.xml.crypto.Data
+import javafx.scene.control.TextField
 import kotlin.concurrent.thread
 
 enum class ViewMode { GLOBAL, DOCUMENT, SEARCH, SELECTION}
 
 class ExplorerController {
+    // --- Config
     private var currentMode = ViewMode.GLOBAL
     private var currentFilterId: String? = null
+    private val numberOfDetailsFor = 50
 
-    fun switchView(mode: ViewMode, filterId: String? = null) {
-        this.currentMode = mode
-        this.currentFilterId = filterId
+    // --- Dependencies
+    private val OllamaClient = DependencyRegistry.ollamaClient
+    private val DatabaseFactory = DependencyRegistry.databaseFactory
+    private val OllamaEnricher = DependencyRegistry.ollamaEnricher
+    private val ClusterRefiner = DependencyRegistry.clusterRefiner
+    private val LayoutEngine = DependencyRegistry.layoutEngine
+    private lateinit var renderer: ExplorerRenderer
+    private lateinit var pipeline: InputPipeline
 
-        thread(start = true) {
-            val points = when(mode) {
-                ViewMode.GLOBAL -> DatabaseFactory.getParagraphPoints()
-                ViewMode.DOCUMENT -> DatabaseFactory.getParagraphPoints().filter { it.parentId == filterId}
-                ViewMode.SELECTION -> AnalysisContext.state.selectedPoints.toList()
-                ViewMode.SEARCH -> {
-                    val queryVec = OllamaClient.getVector(filterId ?: "", 512)
-                    DatabaseFactory.searchParagraphs(queryVec)
-                }
-            }
+    // --- Local cache of raw data
+    private var cachedPoints: List<VectorPoint> = emptyList()
 
-            Platform.runLater {
-                cachedPoints = points
-                runAnalysisPipeline()
-            }
-        }
-    }
-
-    // --- UI INJECTION ---
+    // --- UI Injection
     @FXML private lateinit var mapContainer: StackPane
     @FXML private lateinit var mapCanvas: Canvas
     @FXML private lateinit var loadingBox: VBox
     @FXML private lateinit var analyzingStatusLabel: Label
     @FXML private lateinit var detailsBox: VBox
-
-    // --- LOGIC ENGINE ---
-    // "Dumb" renderer - paints based on AppState
-    private lateinit var renderer: ExplorerRenderer
-
-    // Handles mouse interaction (Selection, Hover)
-    private lateinit var pipeline: InputPipeline
-
-    // Local cache of raw data
-    private var cachedPoints: List<VectorPoint> = emptyList()
-
-    // Config
-    private val numberOfDetailsFor = 50
+    @FXML private lateinit var searchField: TextField
 
     @FXML
     fun initialize() {
-        renderer = ExplorerRenderer(mapCanvas)
-        pipeline = InputPipeline(AnalysisContext)
+        DependencyRegistry.explorerController = this
+
+        renderer = DependencyRegistry.createRenderer(mapCanvas)
+        pipeline = DependencyRegistry.inputPipeline
 
         // --- Bind layout resizing
         mapCanvas.widthProperty().bind(mapContainer.widthProperty())
@@ -115,6 +91,28 @@ class ExplorerController {
 
         // --- Initial Data Load
         loadDataFromDb()
+    }
+
+    fun switchView(mode: ViewMode, filterId: String? = null) {
+        this.currentMode = mode
+        this.currentFilterId = filterId
+
+        thread(start = true) {
+            val points = when(mode) {
+                ViewMode.GLOBAL -> DatabaseFactory.getParagraphPoints()
+                ViewMode.DOCUMENT -> DatabaseFactory.getParagraphPoints().filter { it.parentId == filterId}
+                ViewMode.SELECTION -> AnalysisContext.state.selectedPoints.toList()
+                ViewMode.SEARCH -> {
+                    val queryVec = OllamaClient.getVector(filterId ?: "", 512)
+                    DatabaseFactory.searchParagraphs(queryVec)
+                }
+            }
+
+            Platform.runLater {
+                cachedPoints = points
+                runAnalysisPipeline()
+            }
+        }
     }
 
     private fun repaint() {
@@ -324,5 +322,19 @@ class ExplorerController {
             warning.maxWidth = Double.MAX_VALUE
             detailsBox.children.add(warning)
         }
+    }
+
+    // ==============================================
+    // SEARCH
+    // ==============================================
+    @FXML
+    fun onSearchAction() {
+        val query = searchField.text
+        if (query.isNullOrBlank())
+            // Return to global view state
+            switchView(ViewMode.GLOBAL)
+        else
+            // Switch to search view state and trigger search by adding query
+            switchView(ViewMode.SEARCH, query)
     }
 }

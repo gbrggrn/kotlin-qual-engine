@@ -1,9 +1,10 @@
 package com.qualengine.core.clustering
 
-import com.qualengine.core.math.VectorMath
+import com.qualengine.app.DependencyRegistry
 import com.qualengine.data.model.VectorPoint
 
 object ClusterRefiner {
+    private val vectorMath = DependencyRegistry.vectorMath
 
     /**
      * The "Orphanage": Looks for "Noise" points (-1) and assigns them to a cluster
@@ -46,11 +47,11 @@ object ClusterRefiner {
         }
 
         // Pre-calculate magnitudes for the centroids (Optimization)
-        val centroidMagnitudes = centroids.mapValues { (_, vec) -> VectorMath.getMagnitude(vec) }
+        val centroidMagnitudes = centroids.mapValues { (_, vec) -> vectorMath.getMagnitude(vec) }
 
         // Pre-calculate magnitudes for points (Optimization)
         val pointMagnitudes = DoubleArray(points.size) { i ->
-            VectorMath.getMagnitude(points[i].embedding)
+            vectorMath.getMagnitude(points[i].embedding)
         }
 
         // 2. Loop through Orphans
@@ -65,7 +66,7 @@ object ClusterRefiner {
 
                 // Check against every cluster centroid
                 for ((id, centerVec) in centroids) {
-                    val dist = VectorMath.calculateCosineDistance(
+                    val dist = vectorMath.calculateCosineDistance(
                         orphanVec, orphanMag,
                         centerVec, centroidMagnitudes[id]!!
                     )

@@ -9,7 +9,6 @@ import javafx.scene.text.FontWeight
 import javafx.scene.text.TextAlignment
 import kotlin.collections.iterator
 import kotlin.math.abs
-import kotlin.math.absoluteValue
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.pow

@@ -1,6 +1,6 @@
 package com.qualengine.ui.refinery
 
-import com.qualengine.data.pipeline.Refinery
+import com.qualengine.app.DependencyRegistry
 import com.qualengine.data.pipeline.RefineryJob
 import javafx.application.Platform
 import javafx.collections.FXCollections
@@ -16,7 +16,10 @@ import javafx.stage.FileChooser
 import kotlin.concurrent.thread
 
 class RefineryController {
+    // Dependencies
+    private val refinery = DependencyRegistry.refinery
 
+    // Components
     @FXML
     private lateinit var jobTable: TableView<RefineryJob>
     @FXML
@@ -42,6 +45,7 @@ class RefineryController {
 
     @FXML
     fun initialize() {
+        DependencyRegistry.refineryController = this
         jobTable.items = filteredList
 
         colStatus.setCellValueFactory { it.value.statusProperty }
@@ -132,7 +136,7 @@ class RefineryController {
 
                 try {
                     // Heavy lifting upcoming
-                    Refinery.ingestFile(job.file) { progress, status ->
+                    refinery.ingestFile(job.file) { progress, status ->
 
                         // TODO: Throttle UI updates?
                         // If this runs 1000 times/sec, it can freeze the UI.

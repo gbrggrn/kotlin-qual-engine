@@ -1,6 +1,6 @@
 package com.qualengine.core.clustering
 
-import com.qualengine.core.math.VectorMath
+import com.qualengine.app.DependencyRegistry
 import com.qualengine.data.model.ClusterResult
 import com.qualengine.data.model.VectorPoint
 
@@ -8,6 +8,8 @@ class DBSCAN(
     private val epsilon: Double,
     private val minPoints: Int
 ) {
+    private val vectorMath = DependencyRegistry.vectorMath
+
     fun runDBSCAN(points: List<VectorPoint>): ClusterResult {
         // BRIDGE: Extract the arrays straight away.
         // vectors is now List<DoubleArray>
@@ -18,7 +20,7 @@ class DBSCAN(
         var clusterId = 0
 
         // Optimization: Pre-calculate vector magnitudes
-        val magnitudes = vectors.map { VectorMath.getMagnitude(it) }.toDoubleArray()
+        val magnitudes = vectors.map { vectorMath.getMagnitude(it) }.toDoubleArray()
 
         for (i in 0 until n) {
             if (labels[i] != 0) continue
@@ -78,7 +80,7 @@ class DBSCAN(
         for (i in vectors.indices) {
             if (i == index) continue
             // Calls your new VectorMath logic
-            val dist = VectorMath.calculateCosineDistance(targetVec, targetMag, vectors[i], magnitudes[i])
+            val dist = vectorMath.calculateCosineDistance(targetVec, targetMag, vectors[i], magnitudes[i])
             if (dist <= epsilon) neighbors.add(i)
         }
         return neighbors

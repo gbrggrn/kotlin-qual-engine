@@ -1,6 +1,5 @@
 package com.qualengine.core.math
 
-import kotlin.math.pow
 import kotlin.math.sqrt
 
 object VectorMath {

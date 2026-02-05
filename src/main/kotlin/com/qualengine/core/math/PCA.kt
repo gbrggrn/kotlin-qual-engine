@@ -1,7 +1,6 @@
 package com.qualengine.core.math
 
 import com.qualengine.data.model.VectorPoint
-import kotlin.random.Random
 
 object PCA {
 

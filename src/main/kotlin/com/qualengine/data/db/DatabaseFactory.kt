@@ -1,19 +1,18 @@
 package com.qualengine.data.db
 
-import com.qualengine.core.math.VectorMath
+import com.qualengine.app.DependencyRegistry
 import com.qualengine.data.db.model.Documents
 import com.qualengine.data.db.model.Paragraphs
 import com.qualengine.data.db.model.Sentences
 import com.qualengine.data.model.VectorPoint
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.File
 
 object DatabaseFactory {
+    private val vectorMath = DependencyRegistry.vectorMath
 
     fun init() {
         val dbFile = File("qualengine.db")
@@ -126,9 +125,9 @@ object DatabaseFactory {
     fun searchParagraphs(queryVector: DoubleArray, topK: Int = 20): List<VectorPoint> {
         val all = getParagraphPoints()
         return all.map { point ->
-            val magQueryVector = VectorMath.getMagnitude(queryVector)
-            val magPointVector = VectorMath.getMagnitude(point.embedding)
-            val score = VectorMath.calculateCosineDistance(queryVector, magQueryVector, point.embedding, magPointVector)
+            val magQueryVector = vectorMath.getMagnitude(queryVector)
+            val magPointVector = vectorMath.getMagnitude(point.embedding)
+            val score = vectorMath.calculateCosineDistance(queryVector, magQueryVector, point.embedding, magPointVector)
             point to score
         }
             .sortedBy { it.second }

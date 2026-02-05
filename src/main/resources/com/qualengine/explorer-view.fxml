@@ -8,8 +8,9 @@
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
-
 <?import javafx.scene.control.ScrollPane?>
+
+<?import javafx.scene.control.TextField?>
 <BorderPane prefHeight="600.0" prefWidth="800.0" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.qualengine.ui.explorer.ExplorerController">
 
     <top>
@@ -17,6 +18,13 @@
             <children>
                 <Label layoutX="14.0" layoutY="15.0" style="-fx-font-weight: bold; -fx-font-size: 14;" text="Semantic Map" />
                 <Button layoutX="120.0" layoutY="10.0" mnemonicParsing="false" onAction="#onRefreshMap" text="Refresh / Recalculate" />
+            </children>
+            <children>
+                <Label layoutX="14.0" layoutY="15.0" style="-fx-font-weight: bold; -fx-font-size: 14;" text="Semantic Map" />
+                <Button layoutX="120.0" layoutY="10.0" mnemonicParsing="false" onAction="#onRefreshMap" text="Refresh / Recalculate" />
+
+                <TextField fx:id="searchField" layoutX="270.0" layoutY="10.0" prefWidth="250.0"
+                           promptText="Search semantic meaning..." onAction="#onSearchAction"/>
             </children>
         </AnchorPane>
     </top>

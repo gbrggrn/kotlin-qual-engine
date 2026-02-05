@@ -1,14 +1,8 @@
 package com.qualengine.data.pipeline
 
-import com.qualengine.core.analysis.OllamaEnricher
-import com.qualengine.core.analysis.SemanticCompressor
-import com.qualengine.data.client.OllamaClient
+import com.qualengine.app.DependencyRegistry
 import com.qualengine.data.db.model.Documents
-import com.qualengine.core.analysis.ParagraphSplitter
-import com.qualengine.core.analysis.SanityFilter
 import com.qualengine.core.analysis.SanityStatus
-import com.qualengine.core.analysis.SentenceSplitter
-import com.qualengine.core.math.VectorMath
 import com.qualengine.data.db.model.Paragraphs
 import com.qualengine.data.db.model.Sentences
 import com.qualengine.data.model.Paragraph
@@ -18,7 +12,17 @@ import java.io.File
 import java.util.UUID
 
 object Refinery {
+    // Config
     private val MODEL_TOKEN_LIMIT = 8000
+
+    // Dependencies
+    private val ollamaClient = DependencyRegistry.ollamaClient
+    private val ollamaEnricher = DependencyRegistry.ollamaEnricher
+    private val semanticCompressor = DependencyRegistry.semanticCompressor
+    private val paragraphSplitter = DependencyRegistry.paragraphSplitter
+    private val sentenceSplitter = DependencyRegistry.sentenceSplitter
+    private val sanityFilter = DependencyRegistry.sanityFilter
+    private val vectorMath = DependencyRegistry.vectorMath
 
     fun ingestFile (file: File, onProgress: (Double, String) -> Unit) {
         // --- Read file content
@@ -29,7 +33,7 @@ object Refinery {
         // --- Greate global anchor (vectorize document)
         // TOKEN_AMOUNT: nomic-embed-text optimized (8192 token window)
         onProgress(-1.0, "Generating global context...")
-        val docVector = OllamaClient.getVector(rawText, MODEL_TOKEN_LIMIT)
+        val docVector = ollamaClient.getVector(rawText, MODEL_TOKEN_LIMIT)
 
         // --- Save global anchor to database (document)
         saveDocument(docId, file, rawText)
@@ -46,27 +50,27 @@ object Refinery {
         docVector: DoubleArray,
         onProgress: (Double, String) -> Unit
     ) {
-        val paragraphs = ParagraphSplitter.split(docId, rawText)
+        val paragraphs = paragraphSplitter.split(docId, rawText)
         val total = paragraphs.size
         var previousContext = ""
         var lastReportedProgress = 0.0
 
         paragraphs.forEachIndexed { index, p ->
             // --- Apply sanity filter
-            val status = SanityFilter.evaluate(p.content)
+            val status = sanityFilter.evaluate(p.content)
             if (status == SanityStatus.NOISE)
                 return@forEachIndexed
 
             // --- Enrich
-            val compressed = SemanticCompressor.compress(previousContext)
-            val enrichedText = OllamaEnricher.enrichParagraph(p.content, compressed)
+            val compressed = semanticCompressor.compress(previousContext)
+            val enrichedText = ollamaEnricher.enrichParagraph(p.content, compressed)
             previousContext = enrichedText
 
             // --- Vectorize and blend
-            val rawVector = OllamaClient.getVector(enrichedText, MODEL_TOKEN_LIMIT)
+            val rawVector = ollamaClient.getVector(enrichedText, MODEL_TOKEN_LIMIT)
             val finalVector =
                 if (rawVector.isNotEmpty() && status == SanityStatus.CLEAN) {
-                    VectorMath.blend(rawVector, docVector)
+                    vectorMath.blend(rawVector, docVector)
                 } else {
                     rawVector // Leave raw vector for quarantine or empty cases
                 }
@@ -90,7 +94,7 @@ object Refinery {
     }
 
     private fun processSentences(paragraphId: String, docId: String, paragraphContent: String) {
-        val sentences = SentenceSplitter.split(docId, paragraphId, paragraphContent)
+        val sentences = sentenceSplitter.split(docId, paragraphId, paragraphContent)
 
         transaction {
             for (s in sentences) {
