@@ -12,8 +12,10 @@ import javafx.scene.layout.VBox
 import javafx.scene.text.TextAlignment
 import com.qualengine.core.clustering.DBSCAN
 import com.qualengine.core.math.PCA
+import com.qualengine.data.model.AppState
 import com.qualengine.data.model.VectorPoint
 import com.qualengine.data.pipeline.InputPipeline
+import javafx.scene.control.Button
 import javafx.scene.control.TextField
 import kotlin.concurrent.thread
 
@@ -44,6 +46,8 @@ class ExplorerController {
     @FXML private lateinit var analyzingStatusLabel: Label
     @FXML private lateinit var detailsBox: VBox
     @FXML private lateinit var searchField: TextField
+    @FXML private lateinit var exploreButton: Button
+    @FXML private lateinit var backButton: Button
 
     @FXML
     fun initialize() {
@@ -337,5 +341,73 @@ class ExplorerController {
         else
             // Switch to search view state and trigger search by adding query
             switchView(ViewMode.SEARCH, query)
+    }
+
+    // ===============================================
+    // HIERARCHICAL NAVIGATION
+    // ===============================================
+    @FXML
+    fun onExplore(){
+        val current = AnalysisContext.state
+        if (current.selectedPoints.isEmpty())
+            return
+
+        // --- DOWN: identify target layer
+        val firstSelected = current.selectedPoints.first()
+        val nextLayer = firstSelected.layer - 1
+        // Return if already at "sentence" level
+        if (nextLayer < 1)
+            return
+
+        val parentIds = current.selectedPoints.map { it.id }
+
+        thread(start = true) {
+            // Fetch the data we've selected for view
+            val childPoints = when (nextLayer) {
+                3 -> DatabaseFactory.getDocumentPoints()
+                2 -> DatabaseFactory.getParagraphsForDocs(parentIds)
+                1 -> DatabaseFactory.getSentencesForParagraphs(parentIds)
+                else -> emptyList()
+            }
+
+            Platform.runLater {
+                // Save current to history
+                val historyEntry = AppState.NavigationState(cachedPoints, current.currentLayer)
+
+                // Update state and local cache
+                cachedPoints = childPoints
+                AnalysisContext.update( current.copy(
+                    selectedPoints = emptySet(),
+                    currentLayer = nextLayer,
+                    navigationStack = current.navigationStack + historyEntry,
+                ))
+
+                runAnalysisPipeline()
+            }
+        }
+    }
+
+    @FXML
+    fun onBack() {
+        val current = AnalysisContext.state
+        if (current.selectedPoints.isEmpty())
+            return
+
+        val previous = current.navigationStack.last()
+
+        cachedPoints = previous.points
+        AnalysisContext.update( current.copy(
+            selectedPoints = emptySet(),
+            currentLayer = previous.layer,
+            navigationStack = current.navigationStack.dropLast(1),
+        ))
+
+        runAnalysisPipeline()
+    }
+
+    private fun updateNavButtons() {
+        val current = AnalysisContext.state
+        backButton.isDisable = current.navigationStack.isEmpty()
+        exploreButton.isDisable = current.selectedPoints.isEmpty()
     }
 }

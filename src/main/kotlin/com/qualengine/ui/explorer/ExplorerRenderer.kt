@@ -93,83 +93,68 @@ class ExplorerRenderer(private val canvas: Canvas){
                 }
                 // Normal
                 else -> {
-                    val sourceId = point.parentId ?: "Unknown"
                     val layer = point.layer
+                    // If it's a Doc (L3), it has no parent, so use its own ID for the color hue
+                    val sourceId = point.parentId ?: point.id
 
                     val hue = (abs(sourceId.hashCode()) % 360).toDouble()
                     val sourceBaseColor = Color.hsb(hue, 0.7, 0.9)
 
-                    val baseSize =
-                        if (layer == 2)
-                            6.5
-                    else
-                        3.5
-
-                    var finalDotSize = baseSize
-                    val clusterId = point.clusterId
-
-                    if (clusterId != -1 && state.clusterCenters.containsKey(clusterId)) {
-                        val center = state.clusterCenters[clusterId]!!
-                        val centerX = (center.projectedX * drawWidth) + padding
-                        val centerY = (center.projectedY * drawHeight) + padding
-
-                        val dist = sqrt((screenX - centerX).pow(2) + (screenY - centerY).pow(2))
-                        val normalizedDist = (dist / radiusPx).coerceIn(0.0, 1.0)
-
-                        finalDotSize = baseSize - (normalizedDist * (baseSize * 0.5))
+                    // Base size by current view depth
+                    val baseSize = when (state.currentLayer) {
+                        3 -> 14.0 // Documents (Anchors)
+                        2 -> 7.0  // Paragraphs (Thematic)
+                        1 -> 3.0  // Sentences (Dust)
+                        else -> 5.0
                     }
 
-                    if (layer == 2) {
-                        // Paragraphs
-                        graphics.fill = sourceBaseColor
-                        graphics.fillOval(
-                            screenX - (finalDotSize / 2),
-                            screenY - (finalDotSize / 2),
-                            finalDotSize,
-                            finalDotSize
-                        )
+                    // --- RENDER BY LAYER ---
+                    when (layer) {
+                        3 -> { // DOCUMENT LAYER
+                            graphics.fill = sourceBaseColor
+                            graphics.fillOval(screenX - (baseSize / 2), screenY - (baseSize / 2), baseSize, baseSize)
 
-                        // White rim for paragraphs
-                        graphics.stroke = Color.rgb(255, 255, 255)
-                        graphics.lineWidth = 1.0
-                        graphics.strokeOval(
-                            screenX - (finalDotSize / 2),
-                            screenY - (finalDotSize / 2),
-                            finalDotSize,
-                            finalDotSize
-                        )
-                    }
-                    /*val clusterId = point.clusterId
+                            // Text Label for Docs (Title/Origin)
+                            graphics.fill = Color.WHITE
+                            graphics.font = Font.font("System", FontWeight.BOLD, 10.0)
+                            graphics.fillText(point.metaData.take(15), screenX, screenY + baseSize + 5)
+                        }
 
-                    if (clusterId != -1 && state.clusterCenters.containsKey(clusterId)) {
+                        2 -> { // PARAGRAPH LAYER
+                            // Keep your decay logic if you like it, but check for center existence
+                            var finalSize = baseSize
+                            val clusterId = point.clusterId
 
-                        // --- DENSITY METRIC LOGIC ---
-                        val center = state.clusterCenters[clusterId]!!
-                        val centerX = (center.projectedX * drawWidth) + padding
-                        val centerY = (center.projectedY * drawHeight) + padding
+                            if (clusterId != -1 && state.clusterCenters.containsKey(clusterId)) {
+                                val center = state.clusterCenters[clusterId]!!
+                                val centerX = (center.projectedX * drawWidth) + padding
+                                val centerY = (center.projectedY * drawHeight) + padding
+                                val dist = sqrt((screenX - centerX).pow(2) + (screenY - centerY).pow(2))
+                                finalSize = baseSize - ((dist / radiusPx).coerceIn(0.0, 1.0) * (baseSize * 0.4))
+                            }
 
-                        // Distance from center of island
-                        val dx = screenX - centerX
-                        val dy = screenY - centerY
-                        val dist = sqrt(dx * dx + dy * dy)
+                            graphics.fill = sourceBaseColor
+                            graphics.fillOval(
+                                screenX - (finalSize / 2),
+                                screenY - (finalSize / 2),
+                                finalSize,
+                                finalSize
+                            )
 
-                        // Normalize (0.0 = Center, 1.0 = Edge)
-                        // radiusPx is the max size of the island we calculated earlier
-                        val normalizedDist = (dist / radiusPx).coerceIn(0.0, 1.0)
+                            // Subtle rim
+                            graphics.stroke = Color.rgb(255, 255, 255, 0.5)
+                            graphics.strokeOval(
+                                screenX - (finalSize / 2),
+                                screenY - (finalSize / 2),
+                                finalSize,
+                                finalSize
+                            )
+                        }
 
-                        // Dynamic Sizing: Center = 6px, Edge = 2.5px
-                        // This creates the "3D Sphere" effect
-                        val dotSize = 6.0 - (normalizedDist * 3.5)
-
-                        val colorIndex = abs(clusterId) % clusterPalette.size
-                        graphics.fill = clusterPalette[colorIndex]
-
-                        // Draw centered
-                        graphics.fillOval(screenX - (dotSize / 2), screenY - (dotSize / 2), dotSize, dotSize)*/
-                    else {
-                        // Background Stars (Faint, tiny, uniform)
-                        graphics.fill = sourceBaseColor.deriveColor(0.0, 1.0, 0.8, 0.6)
-                        graphics.fillOval(screenX - (finalDotSize / 2), screenY - (finalDotSize / 2), finalDotSize, finalDotSize)
+                        1 -> { // SENTENCE LAYER
+                            graphics.fill = sourceBaseColor.deriveColor(0.0, 1.0, 1.2, 0.4) // Semi-transparent dust
+                            graphics.fillOval(screenX - (baseSize / 2), screenY - (baseSize / 2), baseSize, baseSize)
+                        }
                     }
                 }
             }

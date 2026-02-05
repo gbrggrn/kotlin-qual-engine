@@ -17,14 +17,14 @@
         <AnchorPane prefHeight="50.0" style="-fx-background-color: #ecf0f1; -fx-border-color: #bdc3c7; -fx-border-width: 0 0 1 0;">
             <children>
                 <Label layoutX="14.0" layoutY="15.0" style="-fx-font-weight: bold; -fx-font-size: 14;" text="Semantic Map" />
-                <Button layoutX="120.0" layoutY="10.0" mnemonicParsing="false" onAction="#onRefreshMap" text="Refresh / Recalculate" />
-            </children>
-            <children>
-                <Label layoutX="14.0" layoutY="15.0" style="-fx-font-weight: bold; -fx-font-size: 14;" text="Semantic Map" />
-                <Button layoutX="120.0" layoutY="10.0" mnemonicParsing="false" onAction="#onRefreshMap" text="Refresh / Recalculate" />
 
-                <TextField fx:id="searchField" layoutX="270.0" layoutY="10.0" prefWidth="250.0"
-                           promptText="Search semantic meaning in this map..." onAction="#onSearchAction"/>
+                <Button layoutX="120.0" layoutY="10.0" mnemonicParsing="false" onAction="#onRefreshMap" text="Refresh" />
+
+                <Button fx:id="backButton" layoutX="190.0" layoutY="10.0" mnemonicParsing="false" onAction="#onBack" text="← Back" />
+                <Button fx:id="exploreButton" layoutX="255.0" layoutY="10.0" mnemonicParsing="false" onAction="#onExplore" text="Explore Selected →" style="-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-weight: bold;" />
+
+                <TextField fx:id="searchField" layoutX="400.0" layoutY="10.0" prefWidth="250.0"
+                           promptText="Search semantic meaning..." onAction="#onSearchAction"/>
             </children>
         </AnchorPane>
     </top>

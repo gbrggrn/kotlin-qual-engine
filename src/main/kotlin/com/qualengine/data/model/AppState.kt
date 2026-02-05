@@ -24,7 +24,11 @@ data class AppState(
 
     // --- CLUSTERING DATA ---
     val clusterCenters: Map<Int, VectorPoint> = emptyMap(),
-    val clusterThemes: Map<Int, String> = emptyMap()
+    val clusterThemes: Map<Int, String> = emptyMap(),
+
+    // --- NAVIGATION STATE ---
+    val currentLayer: Int = 2,
+    val navigationStack: List<NavigationState> = emptyList()
 ) {
     // --- HELPER LOGIC ---
     // Computed property: Calculates bounds on the fly based on the current state variables
@@ -42,4 +46,10 @@ data class AppState(
 
     // Helper class for the bounds
     data class Bounds(val x: Double, val y: Double, val w: Double, val h: Double)
+
+    // Navigation state holds the current points being viewed and the layer
+    data class NavigationState(
+        val points: List<VectorPoint>,
+        val layer: Int
+    )
 }

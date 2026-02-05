@@ -142,10 +142,19 @@ object DatabaseFactory {
         }
     }
 
-    // --- Fetch all documents + their origin
-    fun getDocumentPoints(): List<Pair<String, String>> {
+    // --- Fetch all documents as points
+    fun getDocumentPoints(): List<VectorPoint> {
         return transaction {
-            Documents.selectAll().map { it[Documents.id] to it[Documents.origin] }
+            Documents.selectAll().map {
+                val rawString = it[Documents.vector] ?: ""
+                VectorPoint(
+                    id = it[Documents.id],
+                    embedding = parseEmbedding(rawString),
+                    metaData = it[Documents.origin],
+                    layer = 3, // Layer 3 is Document Level
+                    parentId = null
+                )
+            }
         }
     }
 

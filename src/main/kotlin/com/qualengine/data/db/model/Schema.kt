@@ -6,6 +6,7 @@ object Documents : Table() {
     val id = varchar("id", 50)
     val content = text("content")
     val origin = varchar("source", 255)
+    val vector = text("vector").nullable()
     val timestamp = long("timestamp")
 
     override val primaryKey = PrimaryKey(id)

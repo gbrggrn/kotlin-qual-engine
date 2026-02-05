@@ -3,6 +3,7 @@ package com.qualengine.data.pipeline
 import com.qualengine.app.DependencyRegistry
 import com.qualengine.data.db.model.Documents
 import com.qualengine.core.analysis.SanityStatus
+import com.qualengine.data.client.OllamaClient
 import com.qualengine.data.db.model.Paragraphs
 import com.qualengine.data.db.model.Sentences
 import com.qualengine.data.model.Paragraph
@@ -14,6 +15,7 @@ import java.util.UUID
 object Refinery {
     // Config
     private val MODEL_TOKEN_LIMIT = 8000
+    private val SENTENCE_TOKEN_LIMIT = 200
 
     // Dependencies
     private val ollamaClient = DependencyRegistry.ollamaClient
@@ -36,7 +38,7 @@ object Refinery {
         val docVector = ollamaClient.getVector(rawText, MODEL_TOKEN_LIMIT)
 
         // --- Save global anchor to database (document)
-        saveDocument(docId, file, rawText)
+        saveDocument(docId, file, rawText, docVector)
 
         // --- Send to paragraph processor (which will send it to sentence processor)
         processParagraphs(docId, rawText, docVector, onProgress)
@@ -98,11 +100,15 @@ object Refinery {
 
         transaction {
             for (s in sentences) {
+                // Vectorize each sentence individually
+                val sentenceVector = ollamaClient.getVector(s.content, SENTENCE_TOKEN_LIMIT) // Smaller window for speed
+
                 Sentences.insert {
                     it[this.id] = s.id
                     it[this.docId] = s.docId
                     it[this.paragraphId] = s.paragraphId
                     it[this.content] = s.content
+                    it[this.vector] = sentenceVector.joinToString(",")
                     it[this.index] = s.index
                     it[status] = SanityStatus.CLEAN.name
                 }
@@ -110,12 +116,13 @@ object Refinery {
         }
     }
 
-    private fun saveDocument(docId: String, file: File, rawText: String) {
+    private fun saveDocument(docId: String, file: File, rawText: String, vector: DoubleArray) {
         transaction {
             Documents.insert {
                 it[this.id] = docId
                 it[content] = rawText.take(200) + "..."
                 it[origin] = file.name
+                it[this.vector] = vector.joinToString(",")
                 it[timestamp] = System.currentTimeMillis()
             }
         }
