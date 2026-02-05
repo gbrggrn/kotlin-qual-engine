@@ -24,7 +24,7 @@
                 <Button layoutX="120.0" layoutY="10.0" mnemonicParsing="false" onAction="#onRefreshMap" text="Refresh / Recalculate" />
 
                 <TextField fx:id="searchField" layoutX="270.0" layoutY="10.0" prefWidth="250.0"
-                           promptText="Search semantic meaning..." onAction="#onSearchAction"/>
+                           promptText="Search semantic meaning in this map..." onAction="#onSearchAction"/>
             </children>
         </AnchorPane>
     </top>

@@ -1,6 +1,7 @@
 package com.qualengine.core.clustering
 
 import com.qualengine.data.model.VectorPoint
+import kotlin.collections.emptyMap
 import kotlin.math.ceil
 import kotlin.math.sqrt
 import kotlin.math.min
@@ -24,7 +25,6 @@ object LayoutEngine {
 
         val cellWidth = 1.0 / cols
         val cellHeight = 1.0 / rows
-        val maxIslandRadius = min(cellWidth, cellHeight) * 0.40
 
         // 3. Define Island Centers (Virtual Anchors)
         val islandCenters = mutableMapOf<Int, VectorPoint>()
@@ -94,6 +94,10 @@ object LayoutEngine {
         }
 
         return Pair(newPoints, islandCenters)
+    }
+
+    fun createConstellationLayout(points: List<VectorPoint>): Pair<List<VectorPoint>, Map<Int, VectorPoint>> {
+        return Pair(points, emptyMap())
     }
 
     /**

@@ -193,10 +193,11 @@ class ExplorerController {
 
             // --- LAYOUT (Archipelago) ---
             // Calculates gravity and island positions
-            val (finalPoints, islandCenters) = LayoutEngine.createArchipelagoLayout(
-                unitSquarePoints,
-                clusterResult.clusterIds
-            )
+            val (finalPoints, islandCenters) = if (currentMode == ViewMode.SEARCH || currentMode == ViewMode.SELECTION) {
+                LayoutEngine.createConstellationLayout(unitSquarePoints)
+            } else {
+                LayoutEngine.createArchipelagoLayout(unitSquarePoints, clusterResult.clusterIds)
+            }
 
             // --- COMMIT STATE ---
             Platform.runLater {

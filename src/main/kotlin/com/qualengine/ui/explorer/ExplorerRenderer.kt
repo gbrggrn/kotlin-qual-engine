@@ -31,10 +31,6 @@ class ExplorerRenderer(private val canvas: Canvas){
         val drawWidth = width - (padding * 2)
         val drawHeight = height - (padding * 2)
 
-        val clusterPalette = listOf(
-            Color.CYAN, Color.MAGENTA, Color.LIME, Color.ORANGE, Color.DODGERBLUE, Color.HOTPINK
-        )
-
         // --- UPDATED: DYNAMIC GRID WIREFRAMES ---
         // 1. Calculate Grid Dimensions (Must match ClusterUtils exactly)
         val validClusterCount = state.clusterCenters.size
