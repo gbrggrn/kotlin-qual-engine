@@ -25,53 +25,34 @@ class ExplorerRenderer(private val canvas: Canvas){
         graphics.fill = Color.web("#2c3e50")
         graphics.fillRect(0.0, 0.0, width, height)
 
-        if (state.allPoints.isEmpty()) return
+        if (state.allPoints.isEmpty())
+            return
 
         // 2. Calculate Scale
         val drawWidth = width - (padding * 2)
         val drawHeight = height - (padding * 2)
 
-        // --- UPDATED: DYNAMIC GRID WIREFRAMES ---
-        // 1. Calculate Grid Dimensions (Must match ClusterUtils exactly)
-        val validClusterCount = state.clusterCenters.size
+        if (state.currentLayer == 2) {
+            graphics.stroke = Color.rgb(255, 255, 255, 0.15)
+            graphics.lineWidth = 1.0
 
-        // Default fallback if no clusters exist yet
-        var maxIslandRadiusRel = 0.05
+            for ((_, virtualCenterPoint) in state.clusterCenters) {
+                val screenX = (virtualCenterPoint.x * drawWidth) + padding
+                val screenY = (virtualCenterPoint.y * drawHeight) + padding
 
-        if (validClusterCount > 0) {
-            // Calculate Rows/Cols exactly like the Layout Engine
-            val cols = ceil(sqrt(validClusterCount.toDouble())).toInt()
-            val rows = ceil(validClusterCount.toDouble() / cols).toInt()
+                val radiusPx = virtualCenterPoint.radius * drawWidth
 
-            val cellWidth = 1.0 / cols
-            val cellHeight = 1.0 / rows
-
-            // 0.40 = 40% of the cell's smallest dimension
-            maxIslandRadiusRel = min(cellWidth, cellHeight) * 0.40
+                graphics.strokeOval(
+                    screenX - radiusPx,
+                    screenY - radiusPx,
+                    radiusPx * 2,
+                    radiusPx * 2
+                )
+            }
         }
-
-        // 2. Calculate Pixel Radius
-        val radiusPx = maxIslandRadiusRel * drawWidth
-
-        // 3. Draw the Circles
-        graphics.stroke = Color.rgb(255, 255, 255, 0.15)
-        graphics.lineWidth = 1.0
-
-        for ((_, centerPoint) in state.clusterCenters) {
-            val screenX = (centerPoint.projectedX * drawWidth) + padding
-            val screenY = (centerPoint.projectedY * drawHeight) + padding
-
-            graphics.strokeOval(
-                screenX - radiusPx,
-                screenY - radiusPx,
-                radiusPx * 2,
-                radiusPx * 2
-            )
-        }
-        // ------------------------------------------------
 
         // 3. Draw Points
-        for ((index, point) in state.allPoints.withIndex()) {
+        for (point in state.allPoints) {
             val safeX = point.projectedX.coerceIn(0.0, 1.0)
             val safeY = point.projectedY.coerceIn(0.0, 1.0)
 
@@ -96,7 +77,6 @@ class ExplorerRenderer(private val canvas: Canvas){
                     val layer = point.layer
                     // If it's a Doc (L3), it has no parent, so use its own ID for the color hue
                     val sourceId = point.parentId ?: point.id
-
                     val hue = (abs(sourceId.hashCode()) % 360).toDouble()
                     val sourceBaseColor = Color.hsb(hue, 0.7, 0.9)
 
@@ -121,16 +101,18 @@ class ExplorerRenderer(private val canvas: Canvas){
                         }
 
                         2 -> { // PARAGRAPH LAYER
-                            // Keep your decay logic if you like it, but check for center existence
                             var finalSize = baseSize
                             val clusterId = point.clusterId
 
                             if (clusterId != -1 && state.clusterCenters.containsKey(clusterId)) {
-                                val center = state.clusterCenters[clusterId]!!
-                                val centerX = (center.projectedX * drawWidth) + padding
-                                val centerY = (center.projectedY * drawHeight) + padding
+                                val virtualCenterPoint = state.clusterCenters[clusterId]!!
+                                val centerX = (virtualCenterPoint.x * drawWidth) + padding
+                                val centerY = (virtualCenterPoint.y * drawHeight) + padding
                                 val dist = sqrt((screenX - centerX).pow(2) + (screenY - centerY).pow(2))
-                                finalSize = baseSize - ((dist / radiusPx).coerceIn(0.0, 1.0) * (baseSize * 0.4))
+                                val radiusPx = virtualCenterPoint.radius * drawWidth
+
+                                val normDist = (dist / radiusPx).coerceIn(0.0, 1.0)
+                                finalSize = baseSize - (normDist * (baseSize * 0.4))
                             }
 
                             graphics.fill = sourceBaseColor
@@ -165,14 +147,16 @@ class ExplorerRenderer(private val canvas: Canvas){
         graphics.textBaseline = VPos.CENTER
         graphics.font = Font.font("Arial", FontWeight.BOLD, 14.0)
 
-        for ((id, centerPoint) in state.clusterCenters) {
-            val screenX = (centerPoint.projectedX * drawWidth) + padding
-            val screenY = (centerPoint.projectedY * drawHeight) + padding
-
+        for ((id, virtualCenterPoint) in state.clusterCenters) {
+            val screenX = (virtualCenterPoint.x * drawWidth) + padding
+            val screenY = (virtualCenterPoint.y * drawHeight) + padding
             val label = state.clusterThemes[id] ?: "Group $id"
 
-            graphics.fill = Color.WHITE
-            graphics.fillText(label, screenX, screenY - radiusPx - 15)
+            if (state.currentLayer == 2) {
+                graphics.fill = Color.WHITE
+                val radiusPx = virtualCenterPoint.radius * drawWidth
+                graphics.fillText(label, screenX, screenY - radiusPx - 10)
+            }
         }
     }
 }

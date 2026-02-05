@@ -117,9 +117,10 @@ object DatabaseFactory {
     fun getSentencesForParagraphs(paraIds: List<String>): List<VectorPoint> {
         return transaction {
             Sentences.selectAll().where { Sentences.paragraphId inList paraIds }.map {
+                val rawString = it[Paragraphs.vector] ?: ""
                 VectorPoint(
                     id = it[Sentences.id],
-                    embedding = DoubleArray(0),
+                    embedding = parseEmbedding(rawString),
                     metaData = it[Sentences.content],
                     layer = 1,
                     parentId = it[Sentences.paragraphId]
@@ -131,9 +132,10 @@ object DatabaseFactory {
     fun getParagraphsForDocs(docIds: List<String>): List<VectorPoint> {
         return transaction {
             Paragraphs.selectAll().where { Paragraphs.docId inList docIds }.map {
+                val rawString = it[Paragraphs.vector] ?: ""
                 VectorPoint(
                     id = it[Paragraphs.id],
-                    embedding = DoubleArray(0),
+                    embedding = parseEmbedding(rawString),
                     metaData = it[Paragraphs.content],
                     layer = 2,
                     parentId = it[Paragraphs.docId]

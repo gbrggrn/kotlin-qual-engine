@@ -13,11 +13,15 @@ import javafx.scene.text.TextAlignment
 import com.qualengine.core.clustering.DBSCAN
 import com.qualengine.core.math.PCA
 import com.qualengine.data.model.AppState
+import com.qualengine.data.model.ClusterResult
 import com.qualengine.data.model.VectorPoint
+import com.qualengine.data.model.VirtualPoint
 import com.qualengine.data.pipeline.InputPipeline
 import javafx.scene.control.Button
 import javafx.scene.control.TextField
 import kotlin.concurrent.thread
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 enum class ViewMode { GLOBAL, DOCUMENT, SEARCH, SELECTION}
 
@@ -103,7 +107,7 @@ class ExplorerController {
 
         thread(start = true) {
             val points = when(mode) {
-                ViewMode.GLOBAL -> DatabaseFactory.getParagraphPoints()
+                ViewMode.GLOBAL -> DatabaseFactory.getDocumentPoints()
                 ViewMode.DOCUMENT -> DatabaseFactory.getParagraphPoints().filter { it.parentId == filterId}
                 ViewMode.SELECTION -> AnalysisContext.state.selectedPoints.toList()
                 ViewMode.SEARCH -> {
@@ -134,18 +138,16 @@ class ExplorerController {
 
         thread(start = true) {
             // 1. Fetch clean objects from Factory
-            val points = DatabaseFactory.getParagraphPoints() // TODO: Implement switching between layers = new calls
+            val points = DatabaseFactory.getDocumentPoints()
 
             Platform.runLater {
-                if (points.isEmpty()) {
-                    analyzingStatusLabel.text = "No thematic data found."
-                    loadingBox.isVisible = false
-                } else {
-                    cachedPoints = points
-                    analyzingStatusLabel.text = "Loaded ${points.size} paragraphs."
-                    // Auto-start analysis
-                    runAnalysisPipeline()
-                }
+                cachedPoints = points
+                AnalysisContext.update(AnalysisContext.state.copy(
+                    allPoints = points,
+                    currentLayer = 3,
+                    navigationStack = emptyList())
+                )
+                runAnalysisPipeline()
             }
         }
     }
@@ -171,46 +173,94 @@ class ExplorerController {
         thread(start = true) {
             val workingPoints = cachedPoints
 
-            // --- CLUSTERING (DBSCAN) ---
-            val dbscan = DBSCAN(epsilon = 0.23, minPoints = 3)
-            val clusterResult = dbscan.runDBSCAN(workingPoints)
+            // --- CLUSTERING (Peak-Seeking Auto-Tune) ---
+            val pointCount = workingPoints.size
+            val targetIslands = (pointCount / 12).coerceIn(2, 8)
 
-            // Apply labels to points
+            var epsilon = 0.05
+            var bestClusterIds = IntArray(pointCount) { -1 }
+            var maxIslandsFound = 0
+            var bestEpsilon = epsilon
+
+            while (epsilon <= 0.40) { // Ceiling to prevent total document merging
+                val dbscan = DBSCAN(epsilon = epsilon, minPoints = 3)
+                val currentIds = dbscan.runDBSCAN(workingPoints).clusterIds
+                val currentCount = currentIds.filter { it != -1 }.distinct().size
+
+                // If this run found MORE (or equal) islands than before, save it as the 'Best'
+                if (currentCount >= maxIslandsFound && currentCount > 0) {
+                    maxIslandsFound = currentCount
+                    bestClusterIds = currentIds.copyOf()
+                    bestEpsilon = epsilon
+                }
+
+                // If we hit the target, we are done
+                if (currentCount >= targetIslands) break
+
+                // If we were at a peak and now clusters are disappearing, stop and keep the peak
+                if (currentCount < maxIslandsFound && maxIslandsFound >= 2) {
+                    println("Peak detected at ${epsilon - 0.02}. Reverting to $maxIslandsFound islands.")
+                    break
+                }
+
+                epsilon += 0.02
+            }
+
+            // ALWAYS use the best state we found, not the 'current' state
+            val finalClusterIds = bestClusterIds
+            println("--- Auto-Tune Results ---")
+            println("Best Epsilon: $bestEpsilon | Islands: $maxIslandsFound")
+
             var clusteredPoints = workingPoints.mapIndexed { index, p ->
-                p.copy(clusterId = clusterResult.clusterIds[index])
+                p.copy(clusterId = finalClusterIds[index])
             }
 
             // --- REFINEMENT (The Orphanage) ---
-            // Modify IDs in place to adopt orphans
-            ClusterRefiner.assignOrphans(clusteredPoints, clusterResult.clusterIds, maxDistance = 0.25)
+            // Only run this if we actually have clusters to adopt into!
+            if (maxIslandsFound > 0) {
+                // Orphan adoption now works because it sees the islands from the 'Best' run
+                ClusterRefiner.assignOrphans(clusteredPoints, finalClusterIds, maxDistance = bestEpsilon * 1.2)
 
-            // Re-apply refined labels
-            clusteredPoints = clusteredPoints.mapIndexed { index, p ->
-                p.copy(clusterId = clusterResult.clusterIds[index])
+                // Re-apply IDs just in case the refiner modified the array in-place
+                clusteredPoints = clusteredPoints.mapIndexed { index, p ->
+                    p.copy(clusterId = finalClusterIds[index])
+                }
             }
 
             // --- DIMENSIONALITY REDUCTION (PCA) ---
             Platform.runLater { analyzingStatusLabel.text = "Projecting 2D Map..." }
             val pcaPoints = PCA.performPCA(clusteredPoints)
 
-            val unitSquarePoints = LayoutEngine.normalizeToUnitSquare(pcaPoints)
+            // --- LAYOUT ---
+            val (finalPoints, finalAnchors) = if (AnalysisContext.state.currentLayer == 3) {
+                // LAYER 3: Standard Semantic View
+                val validClusters = finalClusterIds.filter { it != -1 }.distinct()
+                val rawAnchors = mutableMapOf<Int, VirtualPoint>()
 
-            // --- LAYOUT (Archipelago) ---
-            // Calculates gravity and island positions
-            val (finalPoints, islandCenters) = if (currentMode == ViewMode.SEARCH || currentMode == ViewMode.SELECTION) {
-                LayoutEngine.createConstellationLayout(unitSquarePoints)
+                validClusters.forEach { id ->
+                    val clusterPoints = pcaPoints.filter { it.clusterId == id }
+                    val avgX = clusterPoints.map { it.projectedX }.average()
+                    val avgY = clusterPoints.map { it.projectedY }.average()
+                    val radius = clusterPoints.maxOfOrNull { p ->
+                        sqrt((p.projectedX - avgX).pow(2) + (p.projectedY - avgY).pow(2))
+                    } ?: 0.05
+                    rawAnchors[id] = VirtualPoint(id, avgX, avgY, radius)
+                }
+
+                // Normalize so the global document map fills the screen
+                LayoutEngine.normalizeEverything(pcaPoints, rawAnchors)
             } else {
-                LayoutEngine.createArchipelagoLayout(unitSquarePoints, clusterResult.clusterIds)
+                // LAYER 2: Forced Island Layout (The Archipelago)
+                LayoutEngine.createGalaxyLayout(pcaPoints, finalClusterIds)
             }
 
-            // --- COMMIT STATE ---
+            // --- COMMIT ---
             Platform.runLater {
-                // Create initial themes map (Loading state)
-                val initialThemes = islandCenters.keys.associateWith { "Processing..." }.toMutableMap()
+                val initialThemes = finalAnchors.keys.associateWith { "Processing..." }.toMutableMap()
 
                 val newState = AnalysisContext.state.copy(
                     allPoints = finalPoints,
-                    clusterCenters = islandCenters, // Ensure Type match here
+                    clusterCenters = finalAnchors,
                     clusterThemes = initialThemes
                 )
 
@@ -218,9 +268,9 @@ class ExplorerController {
                 renderer.render(newState)
 
                 loadingBox.isVisible = false
+                analyzingStatusLabel.isVisible = false
 
-                // Trigger AI in background
-                runAiLabeling(finalPoints, islandCenters.keys)
+                runAiLabeling(finalPoints, finalAnchors.keys)
             }
         }
     }
@@ -381,7 +431,7 @@ class ExplorerController {
                     currentLayer = nextLayer,
                     navigationStack = current.navigationStack + historyEntry,
                 ))
-
+                updateNavButtons()
                 runAnalysisPipeline()
             }
         }
@@ -390,24 +440,26 @@ class ExplorerController {
     @FXML
     fun onBack() {
         val current = AnalysisContext.state
-        if (current.selectedPoints.isEmpty())
+        if (current.navigationStack.isEmpty())
             return
 
         val previous = current.navigationStack.last()
 
         cachedPoints = previous.points
+
         AnalysisContext.update( current.copy(
             selectedPoints = emptySet(),
             currentLayer = previous.layer,
             navigationStack = current.navigationStack.dropLast(1),
         ))
 
+        updateNavButtons()
         runAnalysisPipeline()
     }
 
-    private fun updateNavButtons() {
+    fun updateNavButtons() {
         val current = AnalysisContext.state
         backButton.isDisable = current.navigationStack.isEmpty()
-        exploreButton.isDisable = current.selectedPoints.isEmpty()
+        exploreButton.isDisable = current.selectedPoints.isEmpty() || current.currentLayer <= 1
     }
 }

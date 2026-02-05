@@ -5,6 +5,7 @@ import com.qualengine.core.AnalysisContext
 import com.qualengine.data.model.VectorPoint
 import com.qualengine.ui.explorer.ExplorerController
 import com.qualengine.ui.explorer.ViewMode
+import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.sqrt
 import kotlin.math.pow
@@ -89,11 +90,12 @@ class InputPipeline(
     fun handleMouseReleased(event: MouseEvent) {
         val current = context.state
         context.update(current.copy(isDragging = false))
+        explorerController.updateNavButtons()
     }
 
     fun handleMouseMove(event: MouseEvent) {
         val current = context.state
-        if (current.isDragging || current.allPoints.isEmpty()) return
+        if (current.isDragging || current.selectedPoints.isNotEmpty()) return
 
         val mouseX = event.x
         val mouseY = event.y
@@ -140,10 +142,12 @@ class InputPipeline(
 
             context.update(current.copy(selectedPoints = newSelection))
 
+            explorerController.updateNavButtons()
         } ?: run {
             // Clicked empty space -> Clear
             if (!event.isShiftDown && !event.isShortcutDown) {
                 context.update(current.copy(selectedPoints = emptySet()))
+                explorerController.updateNavButtons()
             }
         }
     }

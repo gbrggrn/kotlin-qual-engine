@@ -23,7 +23,7 @@ data class AppState(
     val dragCurrentY: Double = 0.0,
 
     // --- CLUSTERING DATA ---
-    val clusterCenters: Map<Int, VectorPoint> = emptyMap(),
+    val clusterCenters: Map<Int, VirtualPoint> = emptyMap(),
     val clusterThemes: Map<Int, String> = emptyMap(),
 
     // --- NAVIGATION STATE ---

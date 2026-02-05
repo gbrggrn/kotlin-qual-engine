@@ -11,54 +11,50 @@ object PCA {
         val dimensions = vectors[0].size
         val n = vectors.size
 
-        // --- STEP 1: Center the Data ---
-        // Calculate Mean Vector
+        // --- STEP 1: CONTEXT ERASURE (Local Mean) ---
         val means = DoubleArray(dimensions)
         for (v in vectors) {
-            for (i in 0 until dimensions) {
-                means[i] += v[i]
-            }
+            for (i in 0 until dimensions) means[i] += v[i]
         }
         for (i in 0 until dimensions) means[i] /= n.toDouble()
 
-        // Create Centered Vectors (Element-wise subtraction)
         val centered = vectors.map { v ->
-            val newVec = DoubleArray(dimensions)
-            for (i in 0 until dimensions) {
-                newVec[i] = v[i] - means[i]
-            }
-            newVec
+            DoubleArray(dimensions) { i -> v[i] - means[i] }
         }
 
-        // --- STEP 2: Find First Principal Component (PC1) ---
-        // We use Power Iteration: Repeatedly multiply a random vector by the data
-        // until it aligns with the direction of greatest variance.
+        // --- STEP 2: FIND AXES OF DIFFERENCE ---
         val pc1 = powerIteration(centered, dimensions)
 
-        // --- STEP 3: Find Second Principal Component (PC2) ---
-        // Remove PC1's influence from the data (Deflation) to find the next variance
+        // Deflate to find the second axis
         val residuals = centered.map { vec ->
-            val projection = VectorMath.dotProduct(vec, pc1)
-            val newVec = DoubleArray(dimensions)
-            for (i in 0 until dimensions) {
-                newVec[i] = vec[i] - (projection * pc1[i])
-            }
-            newVec
+            val proj = VectorMath.dotProduct(vec, pc1)
+            DoubleArray(dimensions) { i -> vec[i] - (proj * pc1[i]) }
         }
-
         val pc2 = powerIteration(residuals, dimensions)
 
-        // --- STEP 4: Project and Return ---
-        // Dot product projects the high-dim vector onto the 2D PC axes
-        return points.mapIndexed { index, originalPoint ->
-            val vec = centered[index] // Use centered data for projection
+        // --- STEP 3: CONTRASTIVE PROJECTION ---
+        val rawProjections = points.mapIndexed { i, _ ->
+            val vec = centered[i]
             val x = VectorMath.dotProduct(vec, pc1)
             val y = VectorMath.dotProduct(vec, pc2)
+            x to y
+        }
 
-            // Return updated point (Assume VectorPoint is immutable copy)
-            originalPoint.copy(
-                projectedX = x,
-                projectedY = y
+        // Find the specific range of THIS subset's differences
+        val minX = rawProjections.minOf { it.first }
+        val maxX = rawProjections.maxOf { it.first }
+        val minY = rawProjections.minOf { it.second }
+        val maxY = rawProjections.maxOf { it.second }
+
+        val rangeX = (maxX - minX).coerceAtLeast(1e-9)
+        val rangeY = (maxY - minY).coerceAtLeast(1e-9)
+
+        // --- STEP 4: BLOOM TO UNIT SQUARE ---
+        return points.mapIndexed { i, p ->
+            val (rx, ry) = rawProjections[i]
+            p.copy(
+                projectedX = (rx - minX) / rangeX,
+                projectedY = (ry - minY) / rangeY
             )
         }
     }

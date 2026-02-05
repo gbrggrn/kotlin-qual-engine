@@ -1,128 +1,187 @@
 package com.qualengine.core.clustering
 
 import com.qualengine.data.model.VectorPoint
+import com.qualengine.data.model.VirtualPoint
 import kotlin.collections.emptyMap
-import kotlin.math.ceil
+import kotlin.math.cos
 import kotlin.math.sqrt
-import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.sin
 
 object LayoutEngine {
-
-    fun createArchipelagoLayout(
+    fun createGalaxyLayout(
         rawPoints: List<VectorPoint>,
         clusterIds: IntArray
-    ): Pair<List<VectorPoint>, Map<Int, VectorPoint>> {
-
-        // 1. Identify Valid Clusters
+    ): Pair<List<VectorPoint>, Map<Int, VirtualPoint>> {
         val validClusters = clusterIds.filter { it != -1 }.distinct().sorted()
-        if (validClusters.isEmpty()) return Pair(rawPoints, emptyMap())
+        if (validClusters.isEmpty()) {
+            println("WARNING: No clusters found. Defaulting to raw PCA layout.")
+            // If no clusters, just return the PCA points normalized to fill the screen
+            // so at least they aren't a tiny dot in the middle.
+            return LayoutEngine.normalizeEverything(rawPoints, emptyMap())
+        }
+        val anchors = mutableMapOf<Int, VirtualPoint>()
 
-        val count = validClusters.size
-
-        // 2. GRID MATH
-        val cols = ceil(sqrt(count.toDouble())).toInt()
-        val rows = ceil(count.toDouble() / cols).toInt()
-
-        val cellWidth = 1.0 / cols
-        val cellHeight = 1.0 / rows
-
-        // 3. Define Island Centers (Virtual Anchors)
-        val islandCenters = mutableMapOf<Int, VectorPoint>()
-        validClusters.forEachIndexed { index, clusterId ->
-            val col = index % cols
-            val row = index / cols
-
-            val cx = (col * cellWidth) + (cellWidth / 2)
-            val cy = (row * cellHeight) + (cellHeight / 2)
-
-            // Create a virtual point for the center.
-            // We use an empty array for embedding since this is just a visual anchor.
-            islandCenters[clusterId] = VectorPoint(
-                id = (-clusterId).toString(), // Negative ID to mark it as virtual
-                embedding = DoubleArray(0),
-                projectedX = cx,
-                projectedY = cy,
-                clusterId = clusterId,
-                metaData = "",
-                layer = 2, // TODO: Implement layer logic for this "anchor" when layer selection has been implemented
-                parentId = null
-
+        // 1. PIN ANCHORS: Use 0.1 to 0.9 to stay within the canvas
+        validClusters.forEachIndexed { index, id ->
+            val angle = (2.0 * Math.PI * index) / validClusters.size
+            // We force them away from the center (0.5)
+            anchors[id] = VirtualPoint(
+                id,
+                x = 0.5 + 0.35 * cos(angle),
+                y = 0.5 + 0.35 * sin(angle),
+                radius = 0.12
             )
         }
 
-        // 4. Map Points (Gravity & Compression)
-        // We make a mutable copy of the LIST, but the POINTS inside are still immutable data classes.
-        // We will replace them with .copy() versions as we go.
-        val newPoints = rawPoints.toMutableList()
+        // 2. ATTACH POINTS: Map them to their new island "home"
+        val finalPoints = rawPoints.map { p ->
+            val anchor = anchors[p.clusterId] ?: return@map p
 
+            // Take the PCA variance and scale it to be a local "cloud"
+            // This prevents the global scale from squashing them
+            val localX = (p.projectedX - 0.5) * 0.3
+            val localY = (p.projectedY - 0.5) * 0.3
+
+            p.copy(
+                projectedX = anchor.x + localX,
+                projectedY = anchor.y + localY
+            )
+        }
+
+        // CRITICAL: DO NOT CALL normalizeEverything here.
+        // We want the raw 0.1 - 0.9 coordinates we just made.
+        return Pair(finalPoints, anchors)
+    }
+
+    fun createGalaxyLayout2(
+        rawPoints: List<VectorPoint>,
+        clusterIds: IntArray
+    ): Pair<List<VectorPoint>, Map<Int, VirtualPoint>> {
+
+        val validClusters = clusterIds.filter { it != -1 }.distinct()
+        if (validClusters.isEmpty()) return Pair(rawPoints, emptyMap())
+
+        // 1. Calculate Natural Centroids & Spread
+        val anchors = mutableMapOf<Int, VirtualPoint>()
         validClusters.forEach { clusterId ->
             val indices = rawPoints.indices.filter { clusterIds[it] == clusterId }
-            if (indices.isEmpty()) return@forEach
+            val avgX = indices.sumOf { rawPoints[it].projectedX } / indices.size
+            val avgY = indices.sumOf { rawPoints[it].projectedY } / indices.size
 
-            // A. Centroid (Using projected coordinates)
-            val sumX = indices.sumOf { rawPoints[it].projectedX }
-            val sumY = indices.sumOf { rawPoints[it].projectedY }
-            val centroidX = sumX / indices.size
-            val centroidY = sumY / indices.size
+            // Spread is the distance to the furthest point in the cluster
+            val spread = indices.maxOf { i ->
+                val p = rawPoints[i]
+                sqrt((p.projectedX - avgX).pow(2) + (p.projectedY - avgY).pow(2))
+            }.coerceAtLeast(0.05)
 
-            // B. Radius Calculation
-            var currentRadius = 0.0
+            anchors[clusterId] = VirtualPoint(clusterId, avgX, avgY, spread)
+        }
+
+        // 2. Repulsion Pass (Prevent Overlaps)
+        // We nudge anchors away from each other if their radii collide
+        repeat(3) {
+            for (i in validClusters) {
+                for (j in validClusters) {
+                    if (i == j) continue
+                    val a1 = anchors[i]!!
+                    val a2 = anchors[j]!!
+
+                    val dx = a2.x - a1.x
+                    val dy = a2.y - a1.y
+                    val dist = sqrt(dx * dx + dy * dy).coerceAtLeast(0.001)
+                    val minDist = a1.radius + a2.radius + 0.05 // Radius + padding buffer
+
+                    if (dist < minDist) {
+                        val push = (minDist - dist) / 2
+                        val moveX = (dx / dist) * push
+                        val moveY = (dy / dist) * push
+
+                        a1.x -= moveX
+                        a1.y -= moveY
+                        a2.x += moveX
+                        a2.y += moveY
+                    }
+                }
+            }
+        }
+
+        // 3. Apply Local Layout (Map points to their anchors)
+        val newPoints = rawPoints.toMutableList()
+        val semanticScale = 0.4 // How much to "tighten" the cluster around its anchor
+
+        validClusters.forEach { clusterId ->
+            val anchor = anchors[clusterId]!!
+            val indices = rawPoints.indices.filter { clusterIds[it] == clusterId }
+
+            // Recalculate local centroid to determine the offset
+            val localX = indices.sumOf { rawPoints[it].projectedX } / indices.size
+            val localY = indices.sumOf { rawPoints[it].projectedY } / indices.size
+
             indices.forEach { i ->
                 val p = rawPoints[i]
-                val dx = p.projectedX - centroidX
-                val dy = p.projectedY - centroidY
-                val dist = sqrt(dx * dx + dy * dy)
-                if (dist > currentRadius) currentRadius = dist
-            }
-            if (currentRadius < 0.001) currentRadius = 0.001
-
-            // C. Move & Compress
-            val islandCenter = islandCenters[clusterId]!!
-            val semanticScale = 0.15
-
-            indices.forEach { i ->
-                val original = rawPoints[i]
-
-                val offsetX = (original.projectedX - centroidX) * semanticScale
-                val offsetY = (original.projectedY - centroidY) * semanticScale
-
-                newPoints[i] = original.copy(
-                    projectedX = islandCenter.projectedX + offsetX,
-                    projectedY = islandCenter.projectedY + offsetY
+                // Move the point based on the anchor's adjusted position
+                newPoints[i] = p.copy(
+                    projectedX = anchor.x + (p.projectedX - localX) * semanticScale,
+                    projectedY = anchor.y + (p.projectedY - localY) * semanticScale
                 )
             }
         }
 
-        return Pair(newPoints, islandCenters)
+        return Pair(newPoints, anchors)
     }
 
     fun createConstellationLayout(points: List<VectorPoint>): Pair<List<VectorPoint>, Map<Int, VectorPoint>> {
         return Pair(points, emptyMap())
     }
 
-    /**
-     * Squishes raw PCA coordinates (e.g. -50 to +50) into the Unit Square (0.0 to 1.0).
-     * Essential for mapping to the screen canvas.
-     */
-    fun normalizeToUnitSquare(points: List<VectorPoint>): List<VectorPoint> {
-        if (points.isEmpty()) return points
+    fun normalizeEverything(
+        points: List<VectorPoint>,
+        virtualCenterPoints: Map<Int, VirtualPoint>
+    ): Pair<List<VectorPoint>, Map<Int, VirtualPoint>> {
+        if (points.isEmpty()) return points to virtualCenterPoints
 
-        // 1. Find the bounds of the raw math data
         val minX = points.minOf { it.projectedX }
         val maxX = points.maxOf { it.projectedX }
         val minY = points.minOf { it.projectedY }
         val maxY = points.maxOf { it.projectedY }
 
-        // 2. Calculate range (Avoid divide-by-zero)
         val rangeX = (maxX - minX).coerceAtLeast(0.0001)
         val rangeY = (maxY - minY).coerceAtLeast(0.0001)
 
-        // 3. Map to 0..1 and return updated VectorPoints
-        return points.map { p ->
+        // Use the MAX range to keep things proportional
+        val maxRange = maxOf(rangeX, rangeY)
+        val margin = 0.1 // 10% padding so dots don't hit the canvas edge
+
+        val zoomedPoints = points.map { p ->
+            // Center the smaller dimension
+            val offsetX = (maxRange - rangeX) / 2
+            val offsetY = (maxRange - rangeY) / 2
+
+            val nx = (p.projectedX - minX + offsetX) / maxRange
+            val ny = (p.projectedY - minY + offsetY) / maxRange
+
             p.copy(
-                projectedX = (p.projectedX - minX) / rangeX,
-                projectedY = (p.projectedY - minY) / rangeY
+                projectedX = margin + nx * (1.0 - 2 * margin),
+                projectedY = margin + ny * (1.0 - 2 * margin)
             )
         }
+
+        // Apply identical transformation to anchors
+        val zoomedVirtualCenterPoints = virtualCenterPoints.mapValues { (_, a) ->
+            val offsetX = (maxRange - rangeX) / 2
+            val offsetY = (maxRange - rangeY) / 2
+
+            val nx = (a.x - minX + offsetX) / maxRange
+            val ny = (a.y - minY + offsetY) / maxRange
+
+            a.copy(
+                x = margin + nx * (1.0 - 2 * margin),
+                y = margin + ny * (1.0 - 2 * margin),
+                radius = a.radius / maxRange * (1.0 - 2 * margin)
+            )
+        }
+
+        return Pair(zoomedPoints, zoomedVirtualCenterPoints)
     }
 }
