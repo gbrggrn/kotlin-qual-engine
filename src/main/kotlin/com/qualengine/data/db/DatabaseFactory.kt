@@ -1,5 +1,6 @@
 package com.qualengine.data.db
 
+import com.qualengine.core.math.VectorMath
 import com.qualengine.data.db.model.Documents
 import com.qualengine.data.db.model.Paragraphs
 import com.qualengine.data.db.model.Sentences
@@ -114,8 +115,24 @@ object DatabaseFactory {
         }
     }
 
-    fun getDocumentPoints(): List<VectorPoint> {
-        // TODO: Implement layer 3 retrieval
-        return emptyList()
+    // --- Fetch all documents + their origin
+    fun getDocumentPoints(): List<Pair<String, String>> {
+        return transaction {
+            Documents.selectAll().map { it[Documents.id] to it[Documents.origin] }
+        }
+    }
+
+    // --- Fetch the top 20 results that are semantically closest to the query vector (a vectorized search query)
+    fun searchParagraphs(queryVector: DoubleArray, topK: Int = 20): List<VectorPoint> {
+        val all = getParagraphPoints()
+        return all.map { point ->
+            val magQueryVector = VectorMath.getMagnitude(queryVector)
+            val magPointVector = VectorMath.getMagnitude(point.embedding)
+            val score = VectorMath.calculateCosineDistance(queryVector, magQueryVector, point.embedding, magPointVector)
+            point to score
+        }
+            .sortedByDescending { it.second }
+            .take(topK)
+            .map { it.first }
     }
 }
