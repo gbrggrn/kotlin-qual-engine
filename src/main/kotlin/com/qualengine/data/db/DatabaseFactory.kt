@@ -131,7 +131,7 @@ object DatabaseFactory {
             val score = VectorMath.calculateCosineDistance(queryVector, magQueryVector, point.embedding, magPointVector)
             point to score
         }
-            .sortedByDescending { it.second }
+            .sortedBy { it.second }
             .take(topK)
             .map { it.first }
     }

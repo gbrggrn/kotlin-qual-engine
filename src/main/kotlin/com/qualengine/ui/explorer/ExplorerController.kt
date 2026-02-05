@@ -14,12 +14,42 @@ import com.qualengine.core.clustering.ClusterRefiner
 import com.qualengine.core.clustering.DBSCAN
 import com.qualengine.core.clustering.LayoutEngine
 import com.qualengine.core.math.PCA
+import com.qualengine.data.client.OllamaClient
 import com.qualengine.data.db.DatabaseFactory
 import com.qualengine.data.model.VectorPoint
 import com.qualengine.data.pipeline.InputPipeline
+import org.jetbrains.exposed.sql.Database
+import javax.swing.text.View
+import javax.xml.crypto.Data
 import kotlin.concurrent.thread
 
+enum class ViewMode { GLOBAL, DOCUMENT, SEARCH, SELECTION}
+
 class ExplorerController {
+    private var currentMode = ViewMode.GLOBAL
+    private var currentFilterId: String? = null
+
+    fun switchView(mode: ViewMode, filterId: String? = null) {
+        this.currentMode = mode
+        this.currentFilterId = filterId
+
+        thread(start = true) {
+            val points = when(mode) {
+                ViewMode.GLOBAL -> DatabaseFactory.getParagraphPoints()
+                ViewMode.DOCUMENT -> DatabaseFactory.getParagraphPoints().filter { it.parentId == filterId}
+                ViewMode.SELECTION -> AnalysisContext.state.selectedPoints.toList()
+                ViewMode.SEARCH -> {
+                    val queryVec = OllamaClient.getVector(filterId ?: "", 512)
+                    DatabaseFactory.searchParagraphs(queryVec)
+                }
+            }
+
+            Platform.runLater {
+                cachedPoints = points
+                runAnalysisPipeline()
+            }
+        }
+    }
 
     // --- UI INJECTION ---
     @FXML private lateinit var mapContainer: StackPane
