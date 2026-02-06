@@ -43,8 +43,8 @@ object SanityFilter {
         return when {
             // High symbol density -> probably noise
             symbolRatio > 0.20 -> SanityStatus.NOISE
-            // Low letter ratio -> needs human review
-            letterRatio > 0.20 -> SanityStatus.QUARANTINE
+            // Low letter ratio (perfect would maybe be 0.80) -> needs human review
+            letterRatio < 0.50 -> SanityStatus.QUARANTINE
             // Assume the rest are clean
             else -> SanityStatus.CLEAN
         }
