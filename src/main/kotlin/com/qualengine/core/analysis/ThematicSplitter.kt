@@ -35,8 +35,8 @@ object ThematicSplitter {
         for (i in buffer until sentences.size - buffer) {
             val vecA = vectors[i]
             val vecB = vectors[i + 1]
-            val magA = vecA.size.toDouble()
-            val magB = vecB.size.toDouble()
+            val magA = vectorMath.getMagnitude(vecA)
+            val magB = vectorMath.getMagnitude(vecB)
 
             // Calculate cosine distance between Sentence[i] and Sentence[i+1] (similarity)
             val similarity = vectorMath.calculateCosineDistance(vecA, magA, vecB, magB)
