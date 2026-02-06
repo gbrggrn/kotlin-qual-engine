@@ -6,8 +6,52 @@ enum class SanityStatus {
     NOISE           // Structural crap (no value)
 }
 
+// Regex for common artifacts:
+// - "Page 1 of 10"
+// - "2023-10-10" (Isolated dates)
+// - "v1.0.4"
+private val ARTIFACT_PATTERNS = listOf(
+    Regex("""(?i)page\s+\d+\s+of\s+\d+"""),
+    Regex("""^\d{4}-\d{2}-\d{2}$"""),
+    Regex("""^v?\d+(\.\d+)+$""")
+)
+
 object SanityFilter {
 
+    fun evaluate(text: String): SanityStatus {
+        val trimmed = text.trim()
+
+        // --- Too short to be a thematic sentence
+        if (trimmed.length < 5)
+            return SanityStatus.NOISE
+
+        // --- Check against the regex artifact patterns
+        if (trimmed.length < 100 && ARTIFACT_PATTERNS.any { trimmed.contains(it) }) {
+            return SanityStatus.NOISE
+        }
+
+        // --- Statistical fingerprint
+        val total = trimmed.length
+        val letters = trimmed.count { it.isLetter() }
+        val digits = trimmed.count { it.isDigit() }
+        val whitespace = trimmed.count { it.isWhitespace() }
+        val symbols = total - whitespace - digits - letters // Symbols are what's left...
+
+        val letterRatio = letters.toDouble() / total
+        val symbolRatio = symbols.toDouble() / total
+
+        return when {
+            // High symbol density -> probably noise
+            symbolRatio > 0.20 -> SanityStatus.NOISE
+            // Low letter ratio -> needs human review
+            letterRatio > 0.20 -> SanityStatus.QUARANTINE
+            // Assume the rest are clean
+            else -> SanityStatus.CLEAN
+        }
+    }
+}
+
+    /*
     fun evaluate(text: String): SanityStatus {
         val trimmed = text.trim()
         if (trimmed.length < 5)
@@ -66,4 +110,3 @@ object SanityFilter {
             else -> SanityStatus.CLEAN // Useful data
         }
     }*/
-}
