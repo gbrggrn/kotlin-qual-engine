@@ -5,6 +5,8 @@ import com.qualengine.data.db.model.Documents
 import com.qualengine.core.analysis.SanityStatus
 import com.qualengine.data.db.model.Paragraphs
 import com.qualengine.data.db.model.Sentences
+import com.qualengine.data.io.implementations.DocxParser
+import com.qualengine.data.io.implementations.PDFParser
 import com.qualengine.data.model.TextBlock
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -26,6 +28,8 @@ object Refinery {
     private val vectorMath = DependencyRegistry.vectorMath
     private val thematicSplitter = DependencyRegistry.thematicSplitter
     private val textParser = com.qualengine.data.io.implementations.TextFileParser
+    private val pdfParser = com.qualengine.data.io.implementations.PDFParser
+    private val docxParser = com.qualengine.data.io.implementations.DocxParser
 
     fun ingestFile (file: File, onProgress: (Double, String) -> Unit) {
         // --- Prep
@@ -62,8 +66,12 @@ object Refinery {
 
         // Linked list queue so that split big chunks can fit back in where they were taken from
         val blockQueue = java.util.LinkedList<TextBlock>()
+
+        // Get the correct parser
+        val selectedParser = getParser(file)
+
         // Initialize the queue with the raw stream
-        val rawStream = textParser.parse(file).iterator()
+        val rawStream = selectedParser.parse(file).iterator()
 
         // --- TRIAGE LOOP ---
         while (rawStream.hasNext() || blockQueue.isNotEmpty()) {
@@ -184,6 +192,14 @@ object Refinery {
                 it[this.vector] = vec.joinToString(",")
                 it[this.status] = status.name
             }
+        }
+    }
+
+    private fun getParser(file: File): com.qualengine.data.io.IOParser {
+        return when (file.extension.lowercase()) {
+            "pdf" -> pdfParser
+            "docx" -> docxParser
+            else -> textParser
         }
     }
 
