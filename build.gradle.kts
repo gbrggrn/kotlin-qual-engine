@@ -35,6 +35,13 @@ dependencies {
 
     // --- JSON ---
     implementation("org.json:json:20240303")
+
+    // PDF Support
+    implementation("org.apache.pdfbox:pdfbox:2.0.29")
+
+    // DOCX Support
+    implementation("org.apache.poi:poi-ooxml:5.2.3")
+    implementation("org.apache.logging.log4j:log4j-core:2.20.0")
 }
 
 kotlin {
