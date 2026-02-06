@@ -31,18 +31,18 @@ object SanityFilter {
         }
 
         // --- Statistical fingerprint
-        val total = trimmed.length
+        val total = trimmed.length.toDouble()
         val letters = trimmed.count { it.isLetter() }
         val digits = trimmed.count { it.isDigit() }
         val whitespace = trimmed.count { it.isWhitespace() }
         val symbols = total - whitespace - digits - letters // Symbols are what's left...
 
         val letterRatio = letters.toDouble() / total
-        val symbolRatio = symbols.toDouble() / total
+        val symbolRatio = symbols / total
 
         return when {
             // High symbol density -> probably noise
-            symbolRatio > 0.20 -> SanityStatus.NOISE
+            symbolRatio > 0.15 -> SanityStatus.NOISE
             // Low letter ratio (perfect would maybe be 0.80) -> needs human review
             letterRatio < 0.50 -> SanityStatus.QUARANTINE
             // Assume the rest are clean

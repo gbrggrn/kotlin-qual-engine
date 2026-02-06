@@ -27,6 +27,21 @@ object VectorMath {
         return 1.0 - clampedSim
     }
 
+    fun calculateCosineSimilarity(
+        v1: DoubleArray, mag1: Double,
+        v2: DoubleArray, mag2: Double
+    ): Double {
+        if (mag1 == 0.0 || mag2 == 0.0) return 0.0
+
+        var dot = 0.0
+        for (i in v1.indices) {
+            dot += v1[i] * v2[i]
+        }
+
+        val similarity = dot / (mag1 * mag2)
+        return similarity.coerceIn(-1.0, 1.0)
+    }
+
     fun dotProduct(a: DoubleArray, b: DoubleArray): Double {
         var sum = 0.0
         for (i in a.indices) sum += a[i] * b[i]

@@ -12,6 +12,7 @@ import javafx.scene.layout.VBox
 import javafx.scene.text.TextAlignment
 import com.qualengine.core.clustering.DBSCAN
 import com.qualengine.core.math.PCA
+import com.qualengine.data.db.model.Paragraphs
 import com.qualengine.data.model.AppState
 import com.qualengine.data.model.ClusterResult
 import com.qualengine.data.model.VectorPoint
@@ -19,6 +20,9 @@ import com.qualengine.data.model.VirtualPoint
 import com.qualengine.data.pipeline.InputPipeline
 import javafx.scene.control.Button
 import javafx.scene.control.TextField
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.transactions.transaction
 import kotlin.concurrent.thread
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -269,6 +273,32 @@ class ExplorerController {
 
                 loadingBox.isVisible = false
                 analyzingStatusLabel.isVisible = false
+
+                println("\n====== CLUSTER CONTENTS INSPECTOR ======")
+
+                // Group points by their cluster ID
+                val clusters = clusteredPoints.groupBy { it.clusterId }
+
+                clusters.forEach { (id, points) ->
+                    if (id == -1) return@forEach // Skip noise
+
+                    println("\n--- ISLAND $id (${points.size} chunks) ---")
+
+                    // Grab the first 3 chunks from this island to sample the theme
+                    points.take(3).forEach { p ->
+                        // We assume 'p' has access to the raw text or ID.
+                        // If your AnalysisPoint only has ID, perform a quick DB lookup here.
+
+                        // Pseudo-code for DB lookup if needed:
+                        val text = transaction {
+                            Paragraphs.select { Paragraphs.id eq p.id }
+                                .single()[Paragraphs.content]
+                        }
+
+                        println("   Example: \"${text.take(60).replace("\n", " ")}...\"")
+                    }
+                }
+                println("\n========================================")
 
                 //runAiLabeling(finalPoints, finalAnchors.keys)
             }
