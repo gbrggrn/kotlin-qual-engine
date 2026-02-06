@@ -270,13 +270,13 @@ class ExplorerController {
                 loadingBox.isVisible = false
                 analyzingStatusLabel.isVisible = false
 
-                runAiLabeling(finalPoints, finalAnchors.keys)
+                //runAiLabeling(finalPoints, finalAnchors.keys)
             }
         }
     }
 
     // ============================================================================================
-    // PHASE 3: AI ENRICHMENT
+    // PHASE 3: AI ENRICHMENT TODO: Rebuild this so that the user can choose WHAT to label - auto-labeling is too expensive.
     // ============================================================================================
 
     private fun runAiLabeling(points: List<VectorPoint>, activeClusterIds: Set<Int>) {

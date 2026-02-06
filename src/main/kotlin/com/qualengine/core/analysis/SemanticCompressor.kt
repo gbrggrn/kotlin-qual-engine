@@ -88,7 +88,7 @@ object SemanticCompressor {
             false
         }
 
-        val result = signals.joinToString("")
+        val result = signals.joinToString(" ")
 
         return if (result.length > 250) {
             result.take(250) + "..."

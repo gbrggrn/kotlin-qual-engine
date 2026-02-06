@@ -42,7 +42,6 @@ object ParagraphSplitter {
                 )
             }
         }
-
         return paragraphList
     }
 }
