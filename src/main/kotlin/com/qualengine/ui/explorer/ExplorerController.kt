@@ -14,13 +14,11 @@ import com.qualengine.core.clustering.DBSCAN
 import com.qualengine.core.math.PCA
 import com.qualengine.data.db.model.Paragraphs
 import com.qualengine.data.model.AppState
-import com.qualengine.data.model.ClusterResult
 import com.qualengine.data.model.VectorPoint
 import com.qualengine.data.model.VirtualPoint
 import com.qualengine.data.pipeline.InputPipeline
 import javafx.scene.control.Button
 import javafx.scene.control.TextField
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import kotlin.concurrent.thread
@@ -36,11 +34,11 @@ class ExplorerController {
     private val numberOfDetailsFor = 50
 
     // --- Dependencies
-    private val OllamaClient = DependencyRegistry.ollamaClient
-    private val DatabaseFactory = DependencyRegistry.databaseFactory
-    private val OllamaEnricher = DependencyRegistry.ollamaEnricher
-    private val ClusterRefiner = DependencyRegistry.clusterRefiner
-    private val LayoutEngine = DependencyRegistry.layoutEngine
+    private val ollamaClient = DependencyRegistry.ollamaClient
+    private val databaseFactory = DependencyRegistry.databaseFactory
+    private val ollamaEnricher = DependencyRegistry.ollamaEnricher
+    private val clusterRefiner = DependencyRegistry.clusterRefiner
+    private val layoutEngine = DependencyRegistry.layoutEngine
     private lateinit var renderer: ExplorerRenderer
     private lateinit var pipeline: InputPipeline
 
@@ -111,12 +109,12 @@ class ExplorerController {
 
         thread(start = true) {
             val points = when(mode) {
-                ViewMode.GLOBAL -> DatabaseFactory.getDocumentPoints()
-                ViewMode.DOCUMENT -> DatabaseFactory.getParagraphPoints().filter { it.parentId == filterId}
+                ViewMode.GLOBAL -> databaseFactory.getDocumentPoints()
+                ViewMode.DOCUMENT -> databaseFactory.getParagraphPoints().filter { it.parentId == filterId}
                 ViewMode.SELECTION -> AnalysisContext.state.selectedPoints.toList()
                 ViewMode.SEARCH -> {
-                    val queryVec = OllamaClient.getVector(filterId ?: "", 512)
-                    DatabaseFactory.searchParagraphs(queryVec)
+                    val queryVec = ollamaClient.getVector(filterId ?: "", 512)
+                    databaseFactory.searchParagraphs(queryVec)
                 }
             }
 
@@ -142,7 +140,7 @@ class ExplorerController {
 
         thread(start = true) {
             // 1. Fetch clean objects from Factory
-            val points = DatabaseFactory.getDocumentPoints()
+            val points = databaseFactory.getDocumentPoints()
 
             Platform.runLater {
                 cachedPoints = points
@@ -179,11 +177,11 @@ class ExplorerController {
 
             // --- CLUSTERING (Peak-Seeking Auto-Tune) ---
             val pointCount = workingPoints.size
-            val targetIslands = (pointCount / 12).coerceIn(2, 8)
+            val targetClusters = (pointCount / 12).coerceIn(2, 8)
 
             var epsilon = 0.05
             var bestClusterIds = IntArray(pointCount) { -1 }
-            var maxIslandsFound = 0
+            var maxClustersFound = 0
             var bestEpsilon = epsilon
 
             while (epsilon <= 0.40) { // Ceiling to prevent total document merging
@@ -191,29 +189,32 @@ class ExplorerController {
                 val currentIds = dbscan.runDBSCAN(workingPoints).clusterIds
                 val currentCount = currentIds.filter { it != -1 }.distinct().size
 
-                // If this run found MORE (or equal) islands than before, save it as the 'Best'
-                if (currentCount >= maxIslandsFound && currentCount > 0) {
-                    maxIslandsFound = currentCount
+                // If this run found MORE (or equal) clusters than before, save it as the 'Best'
+                if (currentCount >= maxClustersFound && currentCount > 0) {
+                    maxClustersFound = currentCount
                     bestClusterIds = currentIds.copyOf()
                     bestEpsilon = epsilon
                 }
 
                 // If we hit the target, we are done
-                if (currentCount >= targetIslands) break
+                if (currentCount >= targetClusters) break
 
                 // If we were at a peak and now clusters are disappearing, stop and keep the peak
-                if (currentCount < maxIslandsFound && maxIslandsFound >= 2) {
-                    println("Peak detected at ${epsilon - 0.02}. Reverting to $maxIslandsFound islands.")
+                if (currentCount < maxClustersFound && maxClustersFound >= 2) {
+                    println("Peak detected at ${epsilon - 0.02}. Reverting to $maxClustersFound islands.")
                     break
                 }
 
                 epsilon += 0.02
             }
 
+            val recursivelySplitClusterIds = clusterRefiner.splitLargeClusters(workingPoints, bestClusterIds)
+
             // ALWAYS use the best state we found, not the 'current' state
-            val finalClusterIds = bestClusterIds
+            val finalClusterIds = recursivelySplitClusterIds
             println("--- Auto-Tune Results ---")
-            println("Best Epsilon: $bestEpsilon | Islands: $maxIslandsFound")
+            println("Best Epsilon: $bestEpsilon | Islands: $maxClustersFound")
+            println("Total points: ${workingPoints.size}")
 
             var clusteredPoints = workingPoints.mapIndexed { index, p ->
                 p.copy(clusterId = finalClusterIds[index])
@@ -221,9 +222,9 @@ class ExplorerController {
 
             // --- REFINEMENT (The Orphanage) ---
             // Only run this if we actually have clusters to adopt into!
-            if (maxIslandsFound > 0) {
-                // Orphan adoption now works because it sees the islands from the 'Best' run
-                ClusterRefiner.assignOrphans(clusteredPoints, finalClusterIds, maxDistance = bestEpsilon * 1.2)
+            if (maxClustersFound > 0) {
+                // Orphan adoption now works because it sees the clusters from the 'Best' run
+                clusterRefiner.assignOrphans(clusteredPoints, finalClusterIds, maxDistance = bestEpsilon * 1.2)
 
                 // Re-apply IDs just in case the refiner modified the array in-place
                 clusteredPoints = clusteredPoints.mapIndexed { index, p ->
@@ -252,10 +253,10 @@ class ExplorerController {
                 }
 
                 // Normalize so the global document map fills the screen
-                LayoutEngine.normalizeEverything(pcaPoints, rawAnchors)
+                layoutEngine.normalizeEverything(pcaPoints, rawAnchors)
             } else {
                 // LAYER 2: Forced Island Layout (The Archipelago)
-                LayoutEngine.createGalaxyLayout(pcaPoints, finalClusterIds)
+                layoutEngine.createGalaxyLayout(pcaPoints, finalClusterIds)
             }
 
             // --- COMMIT ---
@@ -321,7 +322,7 @@ class ExplorerController {
                 val snippets = points.filter { it.clusterId == clusterId }.map { it.metaData }
 
                 // 2. Call AI
-                var label = OllamaEnricher.summarizeCluster(snippets)
+                var label = ollamaEnricher.summarizeCluster(snippets)
 
                 // 3. Sanitize
                 label = sanitizeLabel(label)
@@ -444,9 +445,9 @@ class ExplorerController {
         thread(start = true) {
             // Fetch the data we've selected for view
             val childPoints = when (nextLayer) {
-                3 -> DatabaseFactory.getDocumentPoints()
-                2 -> DatabaseFactory.getParagraphsForDocs(parentIds)
-                1 -> DatabaseFactory.getSentencesForParagraphs(parentIds)
+                3 -> databaseFactory.getDocumentPoints()
+                2 -> databaseFactory.getParagraphsForDocs(parentIds)
+                1 -> databaseFactory.getSentencesForParagraphs(parentIds)
                 else -> emptyList()
             }
 

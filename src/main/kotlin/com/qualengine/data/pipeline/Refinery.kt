@@ -28,8 +28,9 @@ object Refinery {
     private val vectorMath = DependencyRegistry.vectorMath
     private val thematicSplitter = DependencyRegistry.thematicSplitter
     private val textParser = com.qualengine.data.io.implementations.TextFileParser
-    private val pdfParser = com.qualengine.data.io.implementations.PDFParser
-    private val docxParser = com.qualengine.data.io.implementations.DocxParser
+    private val pdfParser = PDFParser
+    private val docxParser = DocxParser
+    private val textSanitizer = DependencyRegistry.textSanitizer
 
     fun ingestFile (file: File, onProgress: (Double, String) -> Unit) {
         // --- Prep
@@ -76,11 +77,17 @@ object Refinery {
         // --- TRIAGE LOOP ---
         while (rawStream.hasNext() || blockQueue.isNotEmpty()) {
             // Process queue (split) before pulling new raw block
-            val currentBlock = if(blockQueue.isNotEmpty()) {
+            val rawBlock = if(blockQueue.isNotEmpty()) {
                 blockQueue.removeFirst()
             } else {
                 rawStream.next()
             }
+
+            // --- STEP 1: SANITIZE ---
+            val cleanText = textSanitizer.sanitize(rawBlock.rawText)
+
+            // Add the sanitized text to current block
+            val currentBlock = rawBlock.copy(rawText = cleanText)
 
             // --- STEP 1: SANITY FILTER ---
             // Extract micro blocks

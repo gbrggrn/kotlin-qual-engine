@@ -70,4 +70,33 @@ object VectorMath {
 
         return result
     }
+
+    fun calculateCentroid(vectors: List<DoubleArray>): DoubleArray {
+        val dims = vectors[0].size
+        val centroid = DoubleArray(dims)
+        for (v in vectors) {
+            for (i in 0 until dims){
+                centroid[i] += v[i]
+            }
+        }
+        for (i in 0 until dims) {
+            centroid[i] /= vectors.size.toDouble()
+        }
+
+        return centroid
+    }
+
+    fun distance(v1: DoubleArray, v2: DoubleArray): Double {
+        var sum = 0.0
+        for (i in v1.indices)
+            sum += v1[i] * v2[i]
+        return sum
+    }
+
+    fun subtract(v1: DoubleArray, v2: DoubleArray): DoubleArray {
+        val res = DoubleArray(v1.size)
+        for (i in v1.indices)
+            res[i] = v1[i] - v2[i]
+        return res
+    }
 }

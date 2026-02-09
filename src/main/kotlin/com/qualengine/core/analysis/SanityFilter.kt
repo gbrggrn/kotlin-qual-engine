@@ -16,6 +16,22 @@ private val ARTIFACT_PATTERNS = listOf(
     Regex("""^v?\d+(\.\d+)+$""")
 )
 
+// Regex for headers specifically
+// - "1. Introduction..."
+// - "2.3 Analysis..."
+private val HEADER_NUMBERING = Regex("""^(\d+(\.\d+)*\.?)\s+""")
+
+// Regex for academic captions
+private val CAPTION_PATTERN = Regex("""^(Table|Figure|Fig\.|Chart)\s+\d+[:.]?""")
+
+// Regex for specific academic noise
+private val ACADEMIC_NOISE = listOf(
+    Regex("""(?i)cc\s+by(-nc)?(-nd)?"""), // Creative Commons
+    Regex("""(?i)open\s+access\s+article"""),
+    Regex("""(?i)rights\s+reserved"""),
+    Regex("""(?i)author\s+reuse\s+guidelines""")
+)
+
 object SanityFilter {
 
     fun evaluate(text: String): SanityStatus {
@@ -28,6 +44,24 @@ object SanityFilter {
         // --- Check against the regex artifact patterns
         if (trimmed.length < 100 && ARTIFACT_PATTERNS.any { trimmed.contains(it) }) {
             return SanityStatus.NOISE
+        }
+
+        if (text.length < 300 && ACADEMIC_NOISE.any { trimmed.contains(it) }) {
+            return SanityStatus.NOISE
+        }
+
+        if (text.length < 150 && CAPTION_PATTERN.containsMatchIn(text)) {
+            return SanityStatus.NOISE
+        }
+
+        // --- Check against the regex for header patterns
+        if (trimmed.length < 80) {
+            val startsWithNumber = HEADER_NUMBERING.containsMatchIn(trimmed)
+            val endsWithPunctuation = trimmed.last() in setOf(".", "!", '?')
+
+            if (startsWithNumber || !endsWithPunctuation) {
+                return SanityStatus.NOISE
+            }
         }
 
         // --- Statistical fingerprint

@@ -98,7 +98,7 @@ class RefineryController {
     fun onAddFile() {
         val chooser = FileChooser()
         chooser.title = "Select source files"
-        chooser.extensionFilters.add(FileChooser.ExtensionFilter("Text files", "*.txt", "*.csv", "*.md"))
+        chooser.extensionFilters.add(FileChooser.ExtensionFilter("Text files", "*.txt", "*.csv", "*.md", "*.pdf", "*.docx"))
         val window = jobTable.scene.window
 
         val files = chooser.showOpenMultipleDialog(window)

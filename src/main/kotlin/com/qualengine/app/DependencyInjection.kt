@@ -6,6 +6,7 @@ import com.qualengine.core.analysis.ParagraphSplitter
 import com.qualengine.core.analysis.SanityFilter
 import com.qualengine.core.analysis.SemanticCompressor
 import com.qualengine.core.analysis.SentenceSplitter
+import com.qualengine.core.analysis.TextSanitizer
 import com.qualengine.core.analysis.ThematicSplitter
 import com.qualengine.core.clustering.ClusterRefiner
 import com.qualengine.data.client.OllamaClient
@@ -44,6 +45,7 @@ object DependencyRegistry {
     val analysisContext by lazy { AnalysisContext }
     // - Data ingestion
     val refinery by lazy { Refinery }
+    val textSanitizer by lazy { TextSanitizer }
 
     // ====================
     // UI & INTERACTION
