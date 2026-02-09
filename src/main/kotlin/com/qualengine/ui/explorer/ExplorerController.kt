@@ -11,7 +11,7 @@ import javafx.scene.layout.StackPane
 import javafx.scene.layout.VBox
 import javafx.scene.text.TextAlignment
 import com.qualengine.core.clustering.DBSCAN
-import com.qualengine.core.math.PCA
+import com.qualengine.core.clustering.LayoutEngine
 import com.qualengine.data.db.model.Paragraphs
 import com.qualengine.data.model.AppState
 import com.qualengine.data.model.VectorPoint
@@ -21,9 +21,10 @@ import javafx.scene.control.Button
 import javafx.scene.control.TextField
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.util.Random
 import kotlin.concurrent.thread
-import kotlin.math.pow
-import kotlin.math.sqrt
+import kotlin.math.cos
+import kotlin.math.sin
 
 enum class ViewMode { GLOBAL, DOCUMENT, SEARCH, SELECTION}
 
@@ -168,145 +169,145 @@ class ExplorerController {
     }
 
     private fun runAnalysisPipeline() {
-        loadingBox.isVisible = true
-        analyzingStatusLabel.isVisible = true
-        analyzingStatusLabel.text = "Clustering..."
+        uiHandshake()
 
         thread(start = true) {
             val workingPoints = cachedPoints
 
-            // --- CLUSTERING (Peak-Seeking Auto-Tune) ---
-            val pointCount = workingPoints.size
-            val targetClusters = (pointCount / 12).coerceIn(2, 8)
+            // === DISCOVERY ===
+            // DBSCAN clustering to find the big themes
+            val (bestClusterIds, bestEpsilon) = clusterOnAutoEpsilon(workingPoints)
+            // Recursive splitting to split the large clusters
+            val fracturedClusterIds = clusterRefiner.splitLargeClusters(workingPoints, bestClusterIds)
+            // Assignment of remaining orphans to clusters
+            val tempPoints = workingPoints.mapIndexed { i, p -> p.copy(clusterId = fracturedClusterIds[i]) }
+            clusterRefiner.assignOrphans(tempPoints, fracturedClusterIds, maxDistance = bestEpsilon * 1.2)
+            // The final clusterIds
+            val finalClusterIds = fracturedClusterIds
 
-            var epsilon = 0.05
-            var bestClusterIds = IntArray(pointCount) { -1 }
-            var maxClustersFound = 0
-            var bestEpsilon = epsilon
+            // === LAYOUT ====
+            Platform.runLater { analyzingStatusLabel.text = "Assembling layout..." }
+            // Compute the layout (returns Map<Int, VirtualPoint>)
+            val clusterLayout = layoutEngine.computeLayout(workingPoints, finalClusterIds)
+            // Normalize to viewport coordinates
+            val normalizedLayout = normalizeLayout(clusterLayout)
+            // Position points around normalized cluster centerpoints
+            val finalPoints = positionClusters(workingPoints, finalClusterIds, normalizedLayout)
 
-            while (epsilon <= 0.40) { // Ceiling to prevent total document merging
-                val dbscan = DBSCAN(epsilon = epsilon, minPoints = 3)
-                val currentIds = dbscan.runDBSCAN(workingPoints).clusterIds
-                val currentCount = currentIds.filter { it != -1 }.distinct().size
-
-                // If this run found MORE (or equal) clusters than before, save it as the 'Best'
-                if (currentCount >= maxClustersFound && currentCount > 0) {
-                    maxClustersFound = currentCount
-                    bestClusterIds = currentIds.copyOf()
-                    bestEpsilon = epsilon
-                }
-
-                // If we hit the target, we are done
-                if (currentCount >= targetClusters) break
-
-                // If we were at a peak and now clusters are disappearing, stop and keep the peak
-                if (currentCount < maxClustersFound && maxClustersFound >= 2) {
-                    println("Peak detected at ${epsilon - 0.02}. Reverting to $maxClustersFound islands.")
-                    break
-                }
-
-                epsilon += 0.02
-            }
-
-            val recursivelySplitClusterIds = clusterRefiner.splitLargeClusters(workingPoints, bestClusterIds)
-
-            //val finalMergedClusters = clusterRefiner.clusterReMerger(workingPoints, recursivelySplitClusterIds)
-
-            // ALWAYS use the best state we found, not the 'current' state
-            val finalClusterIds = recursivelySplitClusterIds
-            println("--- Auto-Tune Results ---")
-            println("Best Epsilon: $bestEpsilon | Islands: $maxClustersFound")
-            println("Total points: ${workingPoints.size}")
-
-            var clusteredPoints = workingPoints.mapIndexed { index, p ->
-                p.copy(clusterId = finalClusterIds[index])
-            }
-
-            // --- REFINEMENT (The Orphanage) ---
-            // Only run this if we actually have clusters to adopt into!
-            if (maxClustersFound > 0) {
-                // Orphan adoption now works because it sees the clusters from the 'Best' run
-                clusterRefiner.assignOrphans(clusteredPoints, finalClusterIds, maxDistance = bestEpsilon * 1.2)
-
-                // Re-apply IDs just in case the refiner modified the array in-place
-                clusteredPoints = clusteredPoints.mapIndexed { index, p ->
-                    p.copy(clusterId = finalClusterIds[index])
-                }
-            }
-
-            // --- DIMENSIONALITY REDUCTION (PCA) ---
-            Platform.runLater { analyzingStatusLabel.text = "Projecting 2D Map..." }
-            val pcaPoints = PCA.performPCA(clusteredPoints)
-
-            // --- LAYOUT ---
-            val (finalPoints, finalAnchors) = if (AnalysisContext.state.currentLayer == 3) {
-                // LAYER 3: Standard Semantic View
-                val validClusters = finalClusterIds.filter { it != -1 }.distinct()
-                val rawAnchors = mutableMapOf<Int, VirtualPoint>()
-
-                validClusters.forEach { id ->
-                    val clusterPoints = pcaPoints.filter { it.clusterId == id }
-                    val avgX = clusterPoints.map { it.projectedX }.average()
-                    val avgY = clusterPoints.map { it.projectedY }.average()
-                    val radius = clusterPoints.maxOfOrNull { p ->
-                        sqrt((p.projectedX - avgX).pow(2) + (p.projectedY - avgY).pow(2))
-                    } ?: 0.05
-                    rawAnchors[id] = VirtualPoint(id, avgX, avgY, radius)
-                }
-
-                // Normalize so the global document map fills the screen
-                layoutEngine.normalizeEverything(pcaPoints, rawAnchors)
-            } else {
-                // LAYER 2: Forced Island Layout (The Archipelago)
-                layoutEngine.createGalaxyLayout(pcaPoints, finalClusterIds)
-            }
-
-            // --- COMMIT ---
+            // === COMMIT TO STATE ===
             Platform.runLater {
-                val initialThemes = finalAnchors.keys.associateWith { "Processing..." }.toMutableMap()
+                // Initialize labels as placeholders. User can trigger AI Labeling later.
+                val initialThemes = clusterLayout.keys.associateWith { "Processing..." }
 
                 val newState = AnalysisContext.state.copy(
                     allPoints = finalPoints,
-                    clusterCenters = finalAnchors,
+                    clusterCenters = normalizedLayout,
                     clusterThemes = initialThemes
                 )
 
+                // Update Global State
                 AnalysisContext.update(newState)
+
+                // Trigger Visuals
                 renderer.render(newState)
 
+                // Cleanup UI
                 loadingBox.isVisible = false
                 analyzingStatusLabel.isVisible = false
 
-                println("\n====== CLUSTER CONTENTS INSPECTOR ======")
-
-                // Group points by their cluster ID
-                val clusters = clusteredPoints.groupBy { it.clusterId }
-
-                clusters.forEach { (id, points) ->
-                    if (id == -1) return@forEach // Skip noise
-
-                    println("\n--- ISLAND $id (${points.size} chunks) ---")
-
-                    // Grab the first 3 chunks from this island to sample the theme
-                    points.take(3).forEach { p ->
-                        // We assume 'p' has access to the raw text or ID.
-                        // If your AnalysisPoint only has ID, perform a quick DB lookup here.
-
-                        // Pseudo-code for DB lookup if needed:
-                        val text = transaction {
-                            Paragraphs.select { Paragraphs.id eq p.id }
-                                .single()[Paragraphs.content]
-                        }
-
-                        println("   Example: \"${text.take(60).replace("\n", " ")}...\"")
-                    }
-                }
-                println("\n========================================")
-
-                //runAiLabeling(finalPoints, finalAnchors.keys)
+                // Log Results
+                println("--- Analysis Complete ---")
+                println("Clusters Created: ${clusterLayout.size}")
+                println("Points Processed: ${finalPoints.size}")
             }
+
         }
     }
+
+    private fun positionClusters(points: List<VectorPoint>, ids: IntArray, clusterLayout: Map<Int, VirtualPoint>): List<VectorPoint> {
+        val rng = java.util.Random()
+
+        val maxJitter = 0.04
+
+        return points.mapIndexed { index, p ->
+            val cid = ids[index]
+
+            val center = clusterLayout[cid] ?: VirtualPoint(-1, 0.5, 0.5, 0.0)
+
+            // Orbit Jitter: Scatter points around their star
+            val angle = rng.nextDouble() * 2 * Math.PI
+            val radius = rng.nextDouble() * maxJitter
+
+            val localX = center.x + cos(angle) * radius
+            val localY = center.y + sin(angle) * radius
+
+            p.copy(clusterId = cid, projectedX = localX, projectedY = localY)
+        }
+
+    }
+    private fun uiHandshake() {
+        Platform.runLater {
+            loadingBox.isVisible = true
+            analyzingStatusLabel.isVisible = true
+            analyzingStatusLabel.text = "Clustering..."
+        }
+    }
+
+    private fun clusterOnAutoEpsilon(workingPoints: List<VectorPoint>, pointCount: Int = workingPoints.size): Pair<IntArray, Double> {
+        val targetClusters = (pointCount / 12).coerceIn(2, 8)
+        var bestClusterIds = IntArray(pointCount) { -1 }
+        var maxClustersFound = 0
+        var bestEpsilon = 0.05
+        var epsilon = 0.05
+
+        while (epsilon <= 0.40) {
+            val dbscan = DBSCAN(epsilon = epsilon, minPoints = 3)
+            val currentIds = dbscan.runDBSCAN(workingPoints).clusterIds
+            val currentCount = currentIds.filter { it != -1 }.distinct().size
+
+            if (currentCount >= maxClustersFound && currentCount > 0) {
+                maxClustersFound = currentCount
+                bestClusterIds = currentIds.copyOf()
+                bestEpsilon = epsilon
+            }
+
+            if (currentCount >= targetClusters) break
+            if (currentCount < maxClustersFound && maxClustersFound >= 2) break // Peak detected
+
+            epsilon += 0.02
+        }
+
+        return Pair(bestClusterIds, bestEpsilon)
+    }
+
+    private fun normalizeLayout(rawLayout: Map<Int, VirtualPoint>): Map<Int, VirtualPoint> {
+        if (rawLayout.isEmpty()) return rawLayout
+
+        // 1. Find the boundaries of the physics universe
+        val minX = rawLayout.values.minOf { it.x }
+        val maxX = rawLayout.values.maxOf { it.x }
+        val minY = rawLayout.values.minOf { it.y }
+        val maxY = rawLayout.values.maxOf { it.y }
+
+        // Avoid divide-by-zero if there's only 1 cluster
+        val width = (maxX - minX).coerceAtLeast(1.0)
+        val height = (maxY - minY).coerceAtLeast(1.0)
+
+        // 2. Padding (Keep clusters 5% away from the edge)
+        val padding = 0.05
+
+        // 3. Create a new map with normalized coordinates
+        return rawLayout.mapValues { (_, vp) ->
+            val normX = padding + ((vp.x - minX) / width) * (1.0 - padding * 2)
+            val normY = padding + ((vp.y - minY) / height) * (1.0 - padding * 2)
+
+            val visualRadius = 0.05
+
+            // Return a COPY with new coordinates
+            vp.copy(x = normX, y = normY, radius = visualRadius)
+        }
+    }
+
 
     // ============================================================================================
     // PHASE 3: AI ENRICHMENT TODO: Rebuild this so that the user can choose WHAT to label - auto-labeling is too expensive.
