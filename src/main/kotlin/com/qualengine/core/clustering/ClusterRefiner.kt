@@ -1,7 +1,9 @@
 package com.qualengine.core.clustering
 
 import com.qualengine.app.DependencyRegistry
+import com.qualengine.data.model.ClusterResult
 import com.qualengine.data.model.VectorPoint
+import kotlinx.coroutines.flow.combine
 
 object ClusterRefiner {
     private val vectorMath = DependencyRegistry.vectorMath
@@ -88,47 +90,176 @@ object ClusterRefiner {
         println("ClusterRefiner: Adopted $adoptedCount orphans into clusters.")
     }
 
-    private const val MAX_CLUSTER_SIZE = 15
-    private const val MIN_SPLIT_SIZE = 6
-    private const val SPLIT_SENSITIVITY = 1.2
+    // --- CONFIGURATION ---
+    // The "Hard Limit". No cluster shall pass this size.
+    private const val MAX_CLUSTER_SIZE = 20
+
+    // The "Dust Limit". Don't create shards smaller than this.
+    // This prevents splitting a cluster of 21 into 20 and 1.
+    private const val MIN_FRAGMENT_SIZE = 5
+
+    /**
+     * The Entry Point: Takes the initial DBSCAN results and fractures them
+     * until every cluster meets the MAX_CLUSTER_SIZE constraint.
+     */
+    fun splitLargeClusters(points: List<VectorPoint>, clusterIds: IntArray): IntArray {
+        val newClusterIds = clusterIds.clone()
+        var nextClusterId = (clusterIds.maxOrNull() ?: 0) + 1
+
+        // 1. Group indices by their current Cluster ID
+        // Filter out -1 (Noise) for now, we'll handle them separately if needed
+        // OR: Include noise if you want to cluster the garbage too.
+        // Let's include noise as a specific "Cluster 0" to see if it breaks down nicely.
+        val clusters = clusterIds.indices.groupBy {
+            if (clusterIds[it] == -1) Int.MAX_VALUE else clusterIds[it]
+        }
+
+        for ((id, indices) in clusters) {
+            // If it's a valid cluster OR the "Noise Blob"
+            if (indices.size > MAX_CLUSTER_SIZE) {
+
+                // EXECUTE THE FRACTURE
+                val fragments = recursiveSplit(indices, points)
+
+                // Assign new IDs to the fragments
+                for (fragment in fragments) {
+                    // If fragment is just dust, revert to noise
+                    if (fragment.size < 3) {
+                        fragment.forEach { newClusterIds[it] = -1 }
+                    } else {
+                        // Assign a new, unique ID for this solar system
+                        val newId = nextClusterId++
+                        fragment.forEach { newClusterIds[it] = newId }
+                    }
+                }
+            }
+        }
+
+        return newClusterIds
+    }
+
+    /**
+     * Recursively splits a list of indices until all chunks are <= MAX_CLUSTER_SIZE.
+     */
+    private fun recursiveSplit(indices: List<Int>, points: List<VectorPoint>): List<List<Int>> {
+        // 1. BASE CASE: Success!
+        if (indices.size <= MAX_CLUSTER_SIZE) {
+            return listOf(indices)
+        }
+
+        // 2. LINEARIZE: Find the best axis to project onto
+        val vectors = indices.map { points[it].embedding }
+        val centroid = vectorMath.calculateCentroid(vectors)
+
+        // Find furthest point to define the "Long Axis" of the cloud
+        val furthestVector = vectors.maxByOrNull { vectorMath.distance(it, centroid) }
+            ?: return listOf(indices)
+
+        val axis = vectorMath.subtract(furthestVector, centroid)
+        if (vectorMath.getMagnitude(axis) == 0.0) return listOf(indices) // Identical points
+
+        // Project points onto the axis and sort them
+        val sortedIndices = indices.sortedBy { index ->
+            vectorMath.dotProduct(points[index].embedding, axis)
+        }
+
+        // 3. FIND THE BEST CUT
+        // We look for the largest semantic gap, BUT we are constrained by MIN_FRAGMENT_SIZE.
+        // We cannot cut at index 0 or index (size-1).
+
+        val projections = sortedIndices.map { vectorMath.dotProduct(points[it].embedding, axis) }
+
+        var bestSplitIndex = -1
+        var maxGap = -1.0
+
+        // Valid cut range: from MIN_SIZE to (Total - MIN_SIZE)
+        val startScan = MIN_FRAGMENT_SIZE - 1
+        val endScan = sortedIndices.size - MIN_FRAGMENT_SIZE - 1
+
+        if (startScan > endScan) {
+            // Cluster is too small to split safely (e.g. size 8, min 5).
+            // Return as is, even if slightly violates max size (better than dust).
+            return listOf(indices)
+        }
+
+        for (i in startScan..endScan) {
+            val gap = projections[i+1] - projections[i]
+            if (gap > maxGap) {
+                maxGap = gap
+                bestSplitIndex = i
+            }
+        }
+
+        // 4. EXECUTE SPLIT
+        if (bestSplitIndex != -1) {
+            val clusterA = sortedIndices.subList(0, bestSplitIndex + 1)
+            val clusterB = sortedIndices.subList(bestSplitIndex + 1, sortedIndices.size)
+
+            // Recurse! Keep splitting A and B until they behave.
+            return recursiveSplit(clusterA, points) + recursiveSplit(clusterB, points)
+        }
+
+        // Fallback (should theoretically not be reached if math holds)
+        return listOf(indices)
+    }
+
+    /*
+    private const val MAX_CLUSTER_SIZE = 20
+    private const val MIN_SPLIT_SIZE = 5
+    private const val SPLIT_SENSITIVITY = 1.1
 
     fun splitLargeClusters(points: List<VectorPoint>, clusterIds: IntArray): IntArray {
         val newClusterIds = clusterIds.clone()
 
+        // Many points usually end up as noise - we collect all those into a "mega cluster"
+        val noiseIndices = clusterIds.indices.filter { clusterIds[it] == -1 }
+
+        // If there are a lot of noise-points: assign arbitrary ID
+        val tempNoiseId = Int.MAX_VALUE
+        if (noiseIndices.isNotEmpty())
+            noiseIndices.forEach { newClusterIds[it] = tempNoiseId }
+
         // Group by the current clusters
         val clusters = clusterIds.indices
             .groupBy { clusterIds[it] }
-            .filter { it.key != -1 } // Ignore noise
 
         // Find next safe ID to assign new clusters to
-        var nextId = (clusterIds.maxOrNull() ?: 0) + 1
+        var nextId = (clusterIds.filter { it != -1 }.maxOrNull() ?: 0) + 1
 
+        var debugNumOfClusterSplit = 0
+        var debugNumOfClustersReverted = 0
         for ((id, indices) in clusters) {
-            // Only split if it is a larger cluster than allowed
-            if (indices.size > MAX_CLUSTER_SIZE) {
+            // Split if large noise-blob or mega-cluster
+            val isNoiseBlob = (id == tempNoiseId)
+            val isMegaCluster = indices.size > MAX_CLUSTER_SIZE
 
-                println("Found excessively large cluster (${indices.size}). Splitting...")
-
+            if (isNoiseBlob || isMegaCluster) {
                 // Perform recursive split, evaluating as we go
                 val subClusters = recursiveSplit(indices, points)
-
                 // If multiple new clusters are returned: assign new IDs
                 if (subClusters.size > 1) {
                     for (subClusterIndices in subClusters) {
-                        val newId = nextId++
-                        for (index in subClusterIndices) {
-                            newClusterIds[index] = nextId++
+                        debugNumOfClusterSplit++
+                        // Skip if the resulting split chunk was too small to be meaningful
+                        if (subClusterIndices.size < 3) {
+                            subClusterIndices.forEach { newClusterIds[it] = -1 } // Revert to noise
+                            debugNumOfClustersReverted++
+                        } else {
+                            val newClusterId = nextId++
+                            for (index in subClusterIndices) {
+                                newClusterIds[index] = newClusterId
+                            }
                         }
                     }
                 }
                 // If subClusters.size == 1: no split happened so original IDs are kept
             }
         }
+        println("Splits performed: $debugNumOfClusterSplit. Clusters reverted back to noise (<3): $debugNumOfClustersReverted")
         return newClusterIds
     }
 
     private fun recursiveSplit(indices: List<Int>, points: List<VectorPoint>): List<List<Int>> {
-        // Evaluate size: if too small, no split
         if (indices.size < MIN_SPLIT_SIZE)
             return listOf(indices)
 
@@ -152,36 +283,111 @@ object ClusterRefiner {
         // Scan for "fault line", exactly as in ThematicSplitter
         val projections = sortedIndices.map { vectorMath.dotProduct(points[it].embedding, axis) }
 
-        var maxGap = - 1.0
-        var splitIndex = -1
-
-        // Calculate gaps between the points (that are now in sequence)
-        val gaps = DoubleArray(sortedIndices.size -1)
-        for (i in 0 until sortedIndices.size -1) {
+        val potentialSplits = (0 until sortedIndices.size - 1).map { i ->
             val gap = projections[i + 1] - projections[i]
-            gaps[i] = gap
-            if (gap > maxGap) {
-                maxGap = gap
-                splitIndex = i
-            }
+            i to gap
         }
 
-        val avgGap = gaps.average()
+        val avgGap = potentialSplits.map { it.second }.average()
 
-        // Evaluate split
-        val isMassive = indices.size > (MAX_CLUSTER_SIZE * 2) // If massive cluster
-        val isFaultLine = maxGap > (avgGap * SPLIT_SENSITIVITY) // If huge gap
+        val rankedSplits = potentialSplits.sortedByDescending { it.second }
 
-        if (splitIndex != -1 && (isFaultLine || isMassive)) {
-            // Slice me nice!
-            val clusterA = sortedIndices.subList(0, splitIndex + 1)
-            val clusterB = sortedIndices.subList(splitIndex +1, sortedIndices.size)
+        val isHuge = indices.size > 50
 
-            println("Recursive splitter split: cluster A(${clusterA.size}, cluster B(${clusterB.size}")
+        for ((splitIndex, gapValue) in rankedSplits) {
+            val isFaultLine = if (isHuge)
+                gapValue > avgGap else gapValue > (avgGap * 1.2)
 
-            // Recurse on children
-            return recursiveSplit(clusterA, points) + recursiveSplit(clusterB, points)
+            if (!isFaultLine)
+                break
+
+            val sizeA = splitIndex + 1
+            val sizeB = indices.size - sizeA
+
+            if (sizeA >= 3 && sizeB >= 3) {
+                val clusterA = sortedIndices.subList(0, splitIndex + 1)
+                val clusterB = sortedIndices.subList(splitIndex + 1, sortedIndices.size)
+
+                return recursiveSplit(clusterA, points) + recursiveSplit(clusterB, points)
+            }
         }
         return listOf(indices)
     }
+
+    private const val MERGE_THRESHOLD = 0.15
+
+    fun clusterReMerger(points: List<VectorPoint>, clusterIds: IntArray): IntArray {
+        val newClusterIds = clusterIds.clone()
+
+        val clusters = newClusterIds.indices
+            .groupBy { newClusterIds[it] }
+            .filter { it.key != -1 }
+            .toMutableMap()
+
+        val centroids = HashMap<Int, DoubleArray>()
+        clusters.keys.forEach { id ->
+            val vectors = clusters[id]!!.map { points[it].embedding }
+            centroids[id] = vectorMath.calculateCentroid(vectors)
+        }
+
+        var debugMergedClusters = 0
+        val debugTotalClusters = centroids.size
+
+        var merged = true
+        while(merged) {
+            merged = false
+            val currentIds = clusters.keys.toList()
+
+            pairLoop@ for(i in 0 until currentIds.size) {
+                for(j in i + 1 until currentIds.size) {
+                    val idA = currentIds[i]
+                    val idB = currentIds[j]
+
+                    if (!clusters.containsKey(idA) || !clusters.containsKey(idB))
+                        continue
+
+                    val centerA = centroids[idA]!!
+                    val centerB = centroids[idB]!!
+                    val magA = vectorMath.getMagnitude(centerA)
+                    val magB = vectorMath.getMagnitude(centerB)
+
+                    val dist = vectorMath.calculateCosineDistance(centerA, magA, centerB, magB)
+                    if (dist < 30) {
+                        println("DEBUG: Distance between $idA and $idB is $dist")
+                    }
+
+                    if (dist < MERGE_THRESHOLD) {
+                        // Merge into A
+                        val combinedIndices = clusters[idA]!! + clusters[idB]!!
+                        clusters[idA] = combinedIndices
+
+                        // Remove B
+                        clusters.remove(idB)
+                        centroids.remove(idB)
+
+                        // Recalculate centroid A
+                        val combinedVectors = combinedIndices.map { points[it].embedding }
+                        centroids[idA] = vectorMath.calculateCentroid(combinedVectors)
+
+                        debugMergedClusters++
+                        merged = true
+                        break@pairLoop
+                    }
+                }
+            }
+        }
+
+        for(i in newClusterIds.indices) {
+            if (newClusterIds[i] != -1)
+                newClusterIds[i] = -1
+        }
+
+        for ((id, indices) in clusters) {
+            indices.forEach { newClusterIds[it] = id }
+        }
+
+        println("Merged $debugMergedClusters of total $debugTotalClusters clusters")
+        return newClusterIds
+    }
+     */
 }

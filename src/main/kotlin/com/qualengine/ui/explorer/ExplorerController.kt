@@ -210,6 +210,8 @@ class ExplorerController {
 
             val recursivelySplitClusterIds = clusterRefiner.splitLargeClusters(workingPoints, bestClusterIds)
 
+            //val finalMergedClusters = clusterRefiner.clusterReMerger(workingPoints, recursivelySplitClusterIds)
+
             // ALWAYS use the best state we found, not the 'current' state
             val finalClusterIds = recursivelySplitClusterIds
             println("--- Auto-Tune Results ---")
