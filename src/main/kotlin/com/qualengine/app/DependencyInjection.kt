@@ -14,6 +14,7 @@ import com.qualengine.core.clustering.LayoutEngine
 import com.qualengine.core.math.VectorMath
 import com.qualengine.data.pipeline.InputPipeline
 import com.qualengine.data.pipeline.Refinery
+import com.qualengine.ui.explorer.CoordinateMapper
 import com.qualengine.ui.explorer.ExplorerController
 import com.qualengine.ui.explorer.ExplorerRenderer
 import com.qualengine.ui.refinery.RefineryController
@@ -50,10 +51,14 @@ object DependencyRegistry {
     lateinit var explorerController: ExplorerController
     lateinit var refineryController: RefineryController
     // - Input pipeline
-    val inputPipeline by lazy {
-        InputPipeline(analysisContext, explorerController) }
-    // - Renderer
-    fun createRenderer(canvas: Canvas): ExplorerRenderer {
-        return ExplorerRenderer(canvas)
+    fun createInputPipeline(mainCanvas: Canvas): InputPipeline {
+        return InputPipeline(mainCanvas)
+    }
+    // - Rendering & Coordinates
+    fun createRenderer(canvas: Canvas, coordinateMapper: CoordinateMapper): ExplorerRenderer {
+        return ExplorerRenderer(canvas, coordinateMapper)
+    }
+    fun createCoordinateMapper(canvas: Canvas): CoordinateMapper {
+        return CoordinateMapper(canvas)
     }
 }

@@ -28,7 +28,10 @@ data class AppState(
 
     // --- NAVIGATION STATE ---
     val currentLayer: Int = 2,
-    val navigationStack: List<NavigationState> = emptyList()
+    val navigationStack: List<NavigationState> = emptyList(),
+
+    // --- CAMERA ---
+    val camera: Camera = Camera()
 ) {
     // --- HELPER LOGIC ---
     // Computed property: Calculates bounds on the fly based on the current state variables

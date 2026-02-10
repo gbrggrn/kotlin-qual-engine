@@ -21,7 +21,7 @@ import kotlin.concurrent.thread
 import kotlin.math.cos
 import kotlin.math.sin
 
-enum class ViewMode { GLOBAL, DOCUMENT, SEARCH, SELECTION}
+enum class ViewMode { GLOBAL, SEARCH, SELECTION}
 
 class ExplorerController {
     // --- Config
@@ -37,6 +37,7 @@ class ExplorerController {
     private val layoutEngine = DependencyRegistry.layoutEngine
     private lateinit var renderer: ExplorerRenderer
     private lateinit var pipeline: InputPipeline
+    private lateinit var coordinateMapper: CoordinateMapper
 
     // --- Local cache of raw data
     private var cachedPoints: List<VectorPoint> = emptyList()
@@ -55,8 +56,9 @@ class ExplorerController {
     fun initialize() {
         DependencyRegistry.explorerController = this
 
-        renderer = DependencyRegistry.createRenderer(mapCanvas)
-        pipeline = DependencyRegistry.inputPipeline
+        pipeline = DependencyRegistry.createInputPipeline(mapCanvas)
+        coordinateMapper = DependencyRegistry.createCoordinateMapper(mapCanvas)
+        renderer = DependencyRegistry.createRenderer(mapCanvas, coordinateMapper)
 
         // --- Bind layout resizing
         mapCanvas.widthProperty().bind(mapContainer.widthProperty())
@@ -82,12 +84,13 @@ class ExplorerController {
         mapCanvas.heightProperty().addListener(resizeListener)
 
         // --- Bind MouseEvents to InputPipeline
-        mapCanvas.setOnMouseMoved { e -> pipeline.handleMouseMove(e); repaint() }
-        mapCanvas.setOnMousePressed { e -> pipeline.handleMousePressed(e); repaint() }
-        mapCanvas.setOnMouseDragged { e -> pipeline.handleMouseDragged(e); repaint() }
+        mapCanvas.setOnMouseMoved { e -> pipeline.handleMouseMove(e); requestRender() }
+        mapCanvas.setOnMousePressed { e -> pipeline.handleMousePressed(e); requestRender() }
+        mapCanvas.setOnMouseDragged { e -> pipeline.handleMouseDragged(e); requestRender() }
+        mapCanvas.setOnScroll { e -> pipeline.handleScroll(e); requestRender() }
         mapCanvas.setOnMouseReleased { e ->
             pipeline.handleMouseReleased(e)
-            repaint()
+            requestRender()
             updateSidePanel() // Update text details on release
         }
         mapCanvas.setOnMouseClicked { e ->
@@ -99,15 +102,22 @@ class ExplorerController {
         loadDataFromDb()
     }
 
+    fun requestRender() {
+        renderer.render(AnalysisContext.state)
+    }
+
     fun switchView(mode: ViewMode, filterId: String? = null) {
         this.currentMode = mode
         this.currentFilterId = filterId
 
         thread(start = true) {
             val points = when(mode) {
-                ViewMode.GLOBAL -> databaseFactory.getDocumentPoints()
-                ViewMode.DOCUMENT -> databaseFactory.getParagraphPoints().filter { it.parentId == filterId}
-                ViewMode.SELECTION -> AnalysisContext.state.selectedPoints.toList()
+                ViewMode.GLOBAL -> {
+                    databaseFactory.getParagraphPoints()
+                }
+                ViewMode.SELECTION -> {
+                    AnalysisContext.state.selectedPoints.toList()
+                }
                 ViewMode.SEARCH -> {
                     val queryVec = ollamaClient.getVector(filterId ?: "", 512)
                     databaseFactory.searchParagraphs(queryVec)
@@ -121,8 +131,41 @@ class ExplorerController {
         }
     }
 
-    private fun repaint() {
-        renderer.render(AnalysisContext.state)
+    private fun calculateFitToScreenCamera(
+        points: Map<Int, VirtualPoint>,
+        canvasWidth: Double,
+        canvasHeight: Double,
+    ): AppState.Camera {
+        if (points.isEmpty())
+            return AppState.Camera(0.0, 0.0, 1.0)
+
+        // Define the bounding box of the physical world
+        val minX = points.values.minOf { it.x - it.radius }
+        val maxX = points.values.maxOf { it.x + it.radius }
+        val minY = points.values.minOf { it.y - it.radius }
+        val maxY = points.values.maxOf { it.y + it.radius }
+
+        // Define center of the data
+        val dataCenterX = (minX + maxX) / 2.0
+        val dataCenterY = (minY + maxY) / 2.0
+
+        // Calculate dimensions of the data (the width & height of the physical world)
+        val dataWidth = maxX - minX
+        val dataHeight = maxY - minY
+
+        // Calculate zoom to fit (+ 10% padding)
+        val padding = 1.1
+        val zoomX = canvasWidth / (dataWidth * padding)
+        val zoomY = canvasHeight / (dataHeight * padding)
+
+        // Pick the smaller zoom so that everything fits
+        val finalZoom = minOf(zoomX, zoomY)
+
+        return AppState.Camera(
+            x = dataCenterX,
+            y = dataCenterY,
+            zoom = finalZoom
+        )
     }
 
     // ============================================================================================
@@ -194,17 +237,24 @@ class ExplorerController {
                 // Initialize labels as placeholders. User can trigger AI Labeling later.
                 val initialThemes = clusterLayout.keys.associateWith { "Processing..." }
 
+                val initialCamera = calculateFitToScreenCamera(
+                    clusterLayout,
+                    mapCanvas.width,
+                    mapCanvas.height
+                )
+
                 val newState = AnalysisContext.state.copy(
                     allPoints = finalPoints,
                     clusterCenters = clusterLayout,
-                    clusterThemes = initialThemes
+                    clusterThemes = initialThemes,
+                    camera = initialCamera
                 )
 
                 // Update Global State
                 AnalysisContext.update(newState)
 
                 // Trigger Visuals
-                renderer.render(newState)
+                requestRender()
 
                 // Cleanup UI
                 loadingBox.isVisible = false

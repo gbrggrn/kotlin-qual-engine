@@ -9,8 +9,164 @@ import javafx.scene.text.Font
 import javafx.scene.text.FontWeight
 import javafx.scene.text.TextAlignment
 import kotlin.collections.iterator
-import kotlin.math.abs
 
+class ExplorerRenderer(
+    private val canvas: Canvas,
+    private val coordinateMapper: CoordinateMapper
+) {
+
+    // Helper: Distinct colors for clusters
+    private fun getClusterColor(id: Int, opacity: Double = 1.0): Color {
+        if (id == -1) return Color.rgb(150, 150, 150, opacity)
+        val hue = (kotlin.math.abs(id) * 137.508) % 360
+        return Color.hsb(hue, 0.75, 1.0, opacity)
+    }
+
+    // Helper: Distinct colors for documents
+    private fun getSourceColor(point: VectorPoint, opacity: Double = 1.0): Color {
+        val sourceId = point.parentId ?: point.id
+        val hue = (kotlin.math.abs(sourceId.hashCode()) % 360).toDouble()
+        return Color.hsb(hue, 0.6, 0.95, opacity)
+    }
+
+    fun render(state: AppState) {
+        val graphics = canvas.graphicsContext2D
+        val width = canvas.width
+        val height = canvas.height
+        val camera = state.camera
+
+        // 1. CLEAR SCREEN
+        graphics.fill = Color.web("#1e272e")
+        graphics.fillRect(0.0, 0.0, width, height)
+
+        if (state.allPoints.isEmpty()) return
+
+        // 2. CALCULATE LEVEL OF DETAIL (LOD)
+        // This is the "Semantic Zoom" logic
+        val zoom = camera.zoom
+
+        // Strategy:
+        // Zoom < 0.2  : Galaxy View (Hulls + Big Labels only)
+        // Zoom > 0.2  : Region View (Points appear as dots)
+        // Zoom > 1.5  : Street View (Text snippets appear)
+        val showHulls = true
+        val showPoints = zoom > 0.2
+        val showDetails = zoom > 1.5
+        val fadeClusterLabels = zoom > 2.0 // Hide big theme labels when deep in the weeds
+
+        // ==================================================
+        // PHASE 1: THE TERRITORIES (Hulls)
+        // ==================================================
+        if (showHulls) {
+            for ((id, center) in state.clusterCenters) {
+                // Transform Center to Screen
+                val screenPos = coordinateMapper.worldToScreen(center.x, center.y, camera)
+
+                // Transform Radius (World Units -> Screen Pixels)
+                // Note: We use the raw physics radius here.
+                val radiusPx = center.radius * zoom
+
+                // Cull off-screen hulls for performance
+                if (screenPos.x + radiusPx < 0 || screenPos.x - radiusPx > width ||
+                    screenPos.y + radiusPx < 0 || screenPos.y - radiusPx > height) {
+                    continue
+                }
+
+                val baseColor = getClusterColor(id, 0.15)
+                val borderColor = getClusterColor(id, 0.4)
+
+                graphics.fill = baseColor
+                graphics.fillOval(screenPos.x - radiusPx, screenPos.y - radiusPx, radiusPx * 2, radiusPx * 2)
+
+                graphics.stroke = borderColor
+                graphics.lineWidth = 1.0
+                graphics.strokeOval(screenPos.x - radiusPx, screenPos.y - radiusPx, radiusPx * 2, radiusPx * 2)
+            }
+        }
+
+        // ==================================================
+        // PHASE 2: THE POPULATION (Points)
+        // ==================================================
+        if (showPoints) {
+            for (point in state.allPoints) {
+                val screenPos = coordinateMapper.worldToScreen(point.projectedX, point.projectedY, camera)
+
+                // Cull off-screen points
+                if (screenPos.x < -10 || screenPos.x > width + 10 ||
+                    screenPos.y < -10 || screenPos.y > height + 10) {
+                    continue
+                }
+
+                // Size scales slightly with zoom, but clamps to avoid becoming huge
+                val pointSize = (4.0 * zoom).coerceIn(2.0, 12.0)
+                val pointColor = getSourceColor(point, 0.9)
+
+                // VISUAL STATES
+                when {
+                    // Hovered
+                    point == state.hoveredPoint -> {
+                        graphics.fill = Color.WHITE
+                        graphics.fillOval(screenPos.x - 4, screenPos.y - 4, 8.0, 8.0)
+
+                        // Tooltip (Always visible on hover)
+                        graphics.stroke = Color.WHITE
+                        graphics.lineWidth = 1.0
+                        graphics.strokeText("ID: ${point.id.take(8)}...", screenPos.x + 10, screenPos.y)
+                    }
+                    // Selected
+                    state.selectedPoints.contains(point) -> {
+                        graphics.fill = Color.CYAN
+                        graphics.fillOval(screenPos.x - 3, screenPos.y - 3, 6.0, 6.0)
+                        graphics.stroke = Color.WHITE
+                        graphics.lineWidth = 1.5
+                        graphics.strokeOval(screenPos.x - 3, screenPos.y - 3, 6.0, 6.0)
+                    }
+                    // Normal
+                    else -> {
+                        graphics.fill = pointColor
+                        graphics.fillOval(screenPos.x - (pointSize / 2), screenPos.y - (pointSize / 2), pointSize, pointSize)
+                    }
+                }
+
+                // DETAILED TEXT (Only at high zoom)
+                if (showDetails) {
+                    graphics.fill = Color.rgb(255, 255, 255, 0.7)
+                    graphics.font = Font.font("Arial", 10.0)
+                    // Draw snippet
+                    val text = point.metaData.take(15)
+                    graphics.fillText(text, screenPos.x + 8, screenPos.y + 4)
+                }
+            }
+        }
+
+        // ==================================================
+        // PHASE 3: THE MAP LABELS (Cluster Themes)
+        // ==================================================
+        // We draw these last so they float on top
+        if (!fadeClusterLabels) {
+            graphics.textAlign = TextAlignment.CENTER
+            graphics.textBaseline = VPos.BOTTOM
+            graphics.font = Font.font("Segoe UI", FontWeight.BOLD, 14.0)
+
+            for ((id, center) in state.clusterCenters) {
+                val screenPos = coordinateMapper.worldToScreen(center.x, center.y, camera)
+                val radiusPx = center.radius * zoom
+
+                // Simple culling
+                if (screenPos.x < 0 || screenPos.x > width || screenPos.y < 0 || screenPos.y > height) continue
+
+                val label = state.clusterThemes[id] ?: "Group $id"
+
+                graphics.fill = Color.rgb(255, 255, 255, 0.9)
+                graphics.setEffect(javafx.scene.effect.DropShadow(2.0, Color.BLACK))
+                graphics.fillText(label, screenPos.x, screenPos.y - radiusPx - 5)
+                graphics.setEffect(null)
+            }
+        }
+    }
+}
+
+/*
 class ExplorerRenderer(private val canvas: Canvas) {
 
     // 1. CLUSTER COLORS (For the Hulls/Backgrounds)
@@ -134,3 +290,5 @@ class ExplorerRenderer(private val canvas: Canvas) {
         }
     }
 }
+
+ */
