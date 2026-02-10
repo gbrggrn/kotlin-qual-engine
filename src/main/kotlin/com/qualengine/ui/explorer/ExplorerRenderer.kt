@@ -8,7 +8,6 @@ import javafx.scene.paint.Color
 import javafx.scene.text.Font
 import javafx.scene.text.FontWeight
 import javafx.scene.text.TextAlignment
-import javafx.scene.effect.DropShadow
 import kotlin.collections.iterator
 import kotlin.math.abs
 

@@ -1,9 +1,7 @@
 package com.qualengine.core.clustering
 
 import com.qualengine.app.DependencyRegistry
-import com.qualengine.data.model.ClusterResult
 import com.qualengine.data.model.VectorPoint
-import kotlinx.coroutines.flow.combine
 
 object ClusterRefiner {
     private val vectorMath = DependencyRegistry.vectorMath

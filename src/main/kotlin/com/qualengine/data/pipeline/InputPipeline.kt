@@ -5,7 +5,6 @@ import com.qualengine.core.AnalysisContext
 import com.qualengine.data.model.VectorPoint
 import com.qualengine.ui.explorer.ExplorerController
 import com.qualengine.ui.explorer.ViewMode
-import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.sqrt
 import kotlin.math.pow

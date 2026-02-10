@@ -11,17 +11,12 @@ import javafx.scene.layout.StackPane
 import javafx.scene.layout.VBox
 import javafx.scene.text.TextAlignment
 import com.qualengine.core.clustering.DBSCAN
-import com.qualengine.core.clustering.LayoutEngine
-import com.qualengine.data.db.model.Paragraphs
 import com.qualengine.data.model.AppState
 import com.qualengine.data.model.VectorPoint
 import com.qualengine.data.model.VirtualPoint
 import com.qualengine.data.pipeline.InputPipeline
 import javafx.scene.control.Button
 import javafx.scene.control.TextField
-import org.jetbrains.exposed.sql.select
-import org.jetbrains.exposed.sql.transactions.transaction
-import java.util.Random
 import kotlin.concurrent.thread
 import kotlin.math.cos
 import kotlin.math.sin

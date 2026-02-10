@@ -4,10 +4,7 @@ import com.qualengine.app.DependencyRegistry
 import com.qualengine.data.model.VectorPoint
 import com.qualengine.data.model.VirtualPoint
 import java.util.Random
-import kotlin.collections.emptyMap
-import kotlin.math.cos
 import kotlin.math.pow
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 object LayoutEngine {
