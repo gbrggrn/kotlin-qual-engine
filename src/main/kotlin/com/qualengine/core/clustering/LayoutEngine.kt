@@ -177,8 +177,9 @@ object LayoutEngine {
                     val distSq = dx * dx + dy * dy
                     val dist = sqrt(distSq)
 
-                    // We want them at least (Radius1 + Radius2) apart + Padding
-                    val minDist = n1.radius + n2.radius + 15.0
+                    // Allow slight overlap by 10%
+                    val combinedRadius = n1.radius + n2.radius
+                    val minDist = combinedRadius * 0.9
 
                     if (dist < minDist && dist > 0.001) {
                         // Calculate how much they overlap

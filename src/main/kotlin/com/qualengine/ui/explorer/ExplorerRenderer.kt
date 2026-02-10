@@ -34,6 +34,7 @@ class ExplorerRenderer(
         val width = canvas.width
         val height = canvas.height
         val camera = state.camera
+        val shapePoints = state.clusterShapes
 
         // 1. CLEAR SCREEN
         graphics.fill = Color.web("#1e272e")
@@ -58,29 +59,44 @@ class ExplorerRenderer(
         // PHASE 1: THE TERRITORIES (Hulls)
         // ==================================================
         if (showHulls) {
-            for ((id, center) in state.clusterCenters) {
-                // Transform Center to Screen
-                val screenPos = coordinateMapper.worldToScreen(center.x, center.y, camera)
+            for ((id, shapePoints) in state.clusterShapes) {
+                if (shapePoints.isEmpty()) continue
 
-                // Transform Radius (World Units -> Screen Pixels)
-                // Note: We use the raw physics radius here.
-                val radiusPx = center.radius * zoom
+                // --- FALLBACK FOR TINY CLUSTERS ---
+                // If hull failed or too small, draw a simple blob
+                if (shapePoints.size < 3) {
+                    val center = state.clusterCenters[id] ?: continue
+                    val screenPos = coordinateMapper.worldToScreen(center.x, center.y, camera)
+                    val radius = center.radius * camera.zoom * 0.5 // Smaller visual radius
 
-                // Cull off-screen hulls for performance
-                if (screenPos.x + radiusPx < 0 || screenPos.x - radiusPx > width ||
-                    screenPos.y + radiusPx < 0 || screenPos.y - radiusPx > height) {
+                    graphics.fill = getClusterColor(id, 0.4)
+                    graphics.fillOval(screenPos.x - radius, screenPos.y - radius, radius * 2, radius * 2)
                     continue
                 }
 
-                val baseColor = getClusterColor(id, 0.15)
-                val borderColor = getClusterColor(id, 0.4)
+                // --- DRAW ORGANIC HULL ---
+                graphics.beginPath()
 
-                graphics.fill = baseColor
-                graphics.fillOval(screenPos.x - radiusPx, screenPos.y - radiusPx, radiusPx * 2, radiusPx * 2)
+                val first = coordinateMapper.worldToScreen(shapePoints[0].x, shapePoints[0].y, camera)
+                graphics.moveTo(first.x, first.y)
 
-                graphics.stroke = borderColor
-                graphics.lineWidth = 1.0
-                graphics.strokeOval(screenPos.x - radiusPx, screenPos.y - radiusPx, radiusPx * 2, radiusPx * 2)
+                for (i in 1 until shapePoints.size) {
+                    val p = coordinateMapper.worldToScreen(shapePoints[i].x, shapePoints[i].y, camera)
+                    graphics.lineTo(p.x, p.y)
+                }
+
+                // CRITICAL FIX: Close the Path!
+                // Connects the last point back to the first.
+                graphics.closePath()
+
+                // VISUAL TWEAKS
+                // Increase Opacity (0.15 -> 0.3) so it looks like a distinct region
+                graphics.fill = getClusterColor(id, 0.3)
+                graphics.fill()
+
+                graphics.stroke = getClusterColor(id, 0.8)
+                graphics.lineWidth = 2.0
+                graphics.stroke()
             }
         }
 

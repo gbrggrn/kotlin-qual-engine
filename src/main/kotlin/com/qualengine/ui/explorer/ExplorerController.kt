@@ -15,6 +15,7 @@ import com.qualengine.data.model.AppState
 import com.qualengine.data.model.VectorPoint
 import com.qualengine.data.model.VirtualPoint
 import com.qualengine.data.pipeline.InputPipeline
+import javafx.geometry.Point2D
 import javafx.scene.control.Button
 import javafx.scene.control.TextField
 import kotlin.concurrent.thread
@@ -35,6 +36,7 @@ class ExplorerController {
     private val ollamaEnricher = DependencyRegistry.ollamaEnricher
     private val clusterRefiner = DependencyRegistry.clusterRefiner
     private val layoutEngine = DependencyRegistry.layoutEngine
+    private val geometryMath = DependencyRegistry.geometryMath
     private lateinit var renderer: ExplorerRenderer
     private lateinit var pipeline: InputPipeline
     private lateinit var coordinateMapper: CoordinateMapper
@@ -225,10 +227,10 @@ class ExplorerController {
             Platform.runLater { analyzingStatusLabel.text = "Assembling layout..." }
             // Compute the layout (returns Map<Int, VirtualPoint>)
             val clusterLayout = layoutEngine.computeLayout(workingPoints, finalClusterIds)
-            // Normalize to viewport coordinates
-            //val normalizedLayout = normalizeLayout(clusterLayout)
             // Position points around normalized cluster centerpoints
             val finalPoints = positionClusters(workingPoints, finalClusterIds, clusterLayout)
+            // Generate organic "hulls" that wrap around the clusters
+            val clusterShapes = createClusterHulls(finalPoints, finalClusterIds, clusterLayout)
 
             // === COMMIT TO STATE ===
             Platform.runLater {
@@ -245,6 +247,7 @@ class ExplorerController {
                     allPoints = finalPoints,
                     clusterCenters = clusterLayout,
                     clusterThemes = initialThemes,
+                    clusterShapes = clusterShapes,
                     camera = initialCamera
                 )
 
@@ -267,27 +270,41 @@ class ExplorerController {
         }
     }
 
+    private fun createClusterHulls(points: List<VectorPoint>, ids: IntArray, clusterLayout: Map<Int, VirtualPoint>): Map<Int, List<Point2D>> {
+        val groupedPoints = points.groupBy { it.clusterId }
+
+        val clusterShapes = clusterLayout.keys.associateWith { id ->
+            val clusterPoints = groupedPoints[id] ?: emptyList()
+            val rawPoints = clusterPoints.map { Point2D(it.projectedX, it.projectedY) }
+            val hull = geometryMath.computeConvexHull(rawPoints)
+            geometryMath.smoothPolygon(hull, iterations = 3)
+        }
+
+        return clusterShapes
+    }
+
     private fun positionClusters(points: List<VectorPoint>, ids: IntArray, clusterLayout: Map<Int, VirtualPoint>): List<VectorPoint> {
         val rng = java.util.Random()
-
-        val maxJitter = 0.8
 
         return points.mapIndexed { index, p ->
             val cid = ids[index]
 
             val center = clusterLayout[cid] ?: VirtualPoint(-1, 0.0, 0.0, 10.0)
 
-            // Orbit Jitter: Scatter points around their star
-            val angle = rng.nextDouble() * 2 * Math.PI
-            val radius = center.radius * maxJitter
+            // Gaussian distribution - "hot core"
+            val gX = rng.nextGaussian() / 3.0
+            val gY = rng.nextGaussian() / 3.0
 
-            val localX = center.x + cos(angle) * radius
-            val localY = center.y + sin(angle) * radius
+            val offsetX = gX.coerceIn(-1.0, 1.0) * center.radius
+            val offsetY = gY.coerceIn(-1.0, 1.0) * center.radius
 
-            p.copy(clusterId = cid, projectedX = localX, projectedY = localY)
+            p.copy(
+                clusterId = cid,
+                projectedX = center.x + offsetX,
+                projectedY = center.y + offsetY)
         }
-
     }
+
     private fun uiHandshake() {
         Platform.runLater {
             loadingBox.isVisible = true

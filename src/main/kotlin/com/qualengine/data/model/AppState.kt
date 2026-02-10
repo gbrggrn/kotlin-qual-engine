@@ -1,5 +1,6 @@
 package com.qualengine.data.model
 
+import javafx.geometry.Point2D
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -21,6 +22,9 @@ data class AppState(
     val dragStartY: Double = 0.0,
     val dragCurrentX: Double = 0.0,
     val dragCurrentY: Double = 0.0,
+
+    // --- CLUSTER SHAPES ---
+    val clusterShapes: Map<Int, List<Point2D>> = emptyMap(),
 
     // --- CLUSTERING DATA ---
     val clusterCenters: Map<Int, VirtualPoint> = emptyMap(),

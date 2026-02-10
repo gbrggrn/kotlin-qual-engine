@@ -11,6 +11,7 @@ import com.qualengine.core.clustering.ClusterRefiner
 import com.qualengine.data.client.OllamaClient
 import com.qualengine.data.db.DatabaseFactory
 import com.qualengine.core.clustering.LayoutEngine
+import com.qualengine.core.math.GeometryMath
 import com.qualengine.core.math.VectorMath
 import com.qualengine.data.pipeline.InputPipeline
 import com.qualengine.data.pipeline.Refinery
@@ -38,6 +39,7 @@ object DependencyRegistry {
     val layoutEngine by lazy { LayoutEngine }
     // - Math
     val vectorMath by lazy { VectorMath }
+    val geometryMath by lazy { GeometryMath }
     // - State
     val analysisContext by lazy { AnalysisContext }
     // - Data ingestion
