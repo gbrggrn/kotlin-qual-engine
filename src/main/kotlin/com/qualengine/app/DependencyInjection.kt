@@ -2,7 +2,6 @@ package com.qualengine.app
 
 import com.qualengine.core.AnalysisContext
 import com.qualengine.core.analysis.OllamaEnricher
-import com.qualengine.core.analysis.ParagraphSplitter
 import com.qualengine.core.analysis.SanityFilter
 import com.qualengine.core.analysis.SemanticCompressor
 import com.qualengine.core.analysis.SentenceSplitter
@@ -12,7 +11,6 @@ import com.qualengine.core.clustering.ClusterRefiner
 import com.qualengine.data.client.OllamaClient
 import com.qualengine.data.db.DatabaseFactory
 import com.qualengine.core.clustering.LayoutEngine
-import com.qualengine.core.math.PCA
 import com.qualengine.core.math.VectorMath
 import com.qualengine.data.pipeline.InputPipeline
 import com.qualengine.data.pipeline.Refinery
@@ -30,7 +28,6 @@ object DependencyRegistry {
     val ollamaClient by lazy { OllamaClient }
     // - Analysis
     val ollamaEnricher by lazy { OllamaEnricher }
-    val paragraphSplitter by lazy { ParagraphSplitter }
     val sanityFilter by lazy { SanityFilter }
     val semanticCompressor by lazy { SemanticCompressor }
     val sentenceSplitter by lazy { SentenceSplitter }
@@ -39,7 +36,6 @@ object DependencyRegistry {
     val clusterRefiner by lazy { ClusterRefiner }
     val layoutEngine by lazy { LayoutEngine }
     // - Math
-    val pca by lazy { PCA }
     val vectorMath by lazy { VectorMath }
     // - State
     val analysisContext by lazy { AnalysisContext }

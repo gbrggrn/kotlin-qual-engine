@@ -28,36 +28,6 @@ object DatabaseFactory {
     }
 
     /**
-     * Fetches all rows and converts them directly into the domain model.
-     */
-    fun getAllVectorPoints(): List<VectorPoint> {
-        return transaction {
-            // Assuming your table object is named 'Paragraphs'
-            Paragraphs.selectAll().map { row ->
-
-                // 1. Parse the Embedding (String -> DoubleArray)
-                // Stored in DB as: "[0.012, -0.34, ...]"
-                val rawString = row[Paragraphs.vector] ?: ""
-                val vectorArray = parseEmbedding(rawString)
-
-                // 2. Create the Clean Object
-                VectorPoint(
-                    id = row[Paragraphs.id],
-                    embedding = vectorArray,
-                    metaData = row[Paragraphs.content], // The text snippet
-
-                    // Defaults (will be calculated later by pipeline)
-                    projectedX = 0.0,
-                    projectedY = 0.0,
-                    clusterId = -1,
-                    layer = 2,
-                    parentId = null
-                )
-            }
-        }
-    }
-
-    /**
      * Helper: Converts a database string like "[0.1, 0.2]" into a DoubleArray.
      * Uses manual string manipulation which is faster than Regex/JSON for this specific format.
      */
@@ -88,27 +58,6 @@ object DatabaseFactory {
                     metaData = it[Paragraphs.content],
                     layer = 2,
                     parentId = it[Paragraphs.docId]
-                )
-            }
-        }
-    }
-
-    fun getSentencePoints(parentId: String? = null): List<VectorPoint> {
-        return transaction {
-            val query =
-                if (parentId == null) {
-                Sentences.selectAll().where { Sentences.paragraphId eq parentId }
-            } else {
-                Sentences.selectAll()
-                }
-
-            query.map {
-                VectorPoint(
-                    id = it[Sentences.id],
-                    embedding = DoubleArray(0), // TODO: Change when sentence vectorization is active
-                    metaData = it[Sentences.content],
-                    layer = 1,
-                    parentId = it[Sentences.paragraphId]
                 )
             }
         }
