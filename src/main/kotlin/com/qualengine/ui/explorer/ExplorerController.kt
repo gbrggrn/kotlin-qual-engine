@@ -185,9 +185,9 @@ class ExplorerController {
             // Compute the layout (returns Map<Int, VirtualPoint>)
             val clusterLayout = layoutEngine.computeLayout(workingPoints, finalClusterIds)
             // Normalize to viewport coordinates
-            val normalizedLayout = normalizeLayout(clusterLayout)
+            //val normalizedLayout = normalizeLayout(clusterLayout)
             // Position points around normalized cluster centerpoints
-            val finalPoints = positionClusters(workingPoints, finalClusterIds, normalizedLayout)
+            val finalPoints = positionClusters(workingPoints, finalClusterIds, clusterLayout)
 
             // === COMMIT TO STATE ===
             Platform.runLater {
@@ -196,7 +196,7 @@ class ExplorerController {
 
                 val newState = AnalysisContext.state.copy(
                     allPoints = finalPoints,
-                    clusterCenters = normalizedLayout,
+                    clusterCenters = clusterLayout,
                     clusterThemes = initialThemes
                 )
 

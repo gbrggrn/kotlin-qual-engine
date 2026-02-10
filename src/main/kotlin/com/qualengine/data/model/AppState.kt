@@ -52,4 +52,10 @@ data class AppState(
         val points: List<VectorPoint>,
         val layer: Int
     )
+
+    data class Camera(
+        val x: Double = 0.0,
+        val y: Double = 0.0,
+        val zoom: Double = 0.1
+    )
 }
