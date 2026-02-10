@@ -27,8 +27,7 @@ data class AppState(
     val clusterThemes: Map<Int, String> = emptyMap(),
 
     // --- NAVIGATION STATE ---
-    val currentLayer: Int = 2,
-    val navigationStack: List<NavigationState> = emptyList(),
+    val cameraHistory: List<Camera> = emptyList(),
 
     // --- CAMERA ---
     val camera: Camera = Camera()
@@ -49,12 +48,6 @@ data class AppState(
 
     // Helper class for the bounds
     data class Bounds(val x: Double, val y: Double, val w: Double, val h: Double)
-
-    // Navigation state holds the current points being viewed and the layer
-    data class NavigationState(
-        val points: List<VectorPoint>,
-        val layer: Int
-    )
 
     data class Camera(
         val x: Double = 0.0,

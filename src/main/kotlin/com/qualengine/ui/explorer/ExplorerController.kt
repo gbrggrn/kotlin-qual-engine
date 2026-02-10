@@ -175,19 +175,17 @@ class ExplorerController {
     fun loadDataFromDb() {
         loadingBox.isVisible = true
         analyzingStatusLabel.isVisible = true
-        analyzingStatusLabel.text = "Loading thematic layers..."
+        analyzingStatusLabel.text = "Loading thematic galaxy..."
 
         thread(start = true) {
             // 1. Fetch clean objects from Factory
-            val points = databaseFactory.getDocumentPoints()
+            val points = databaseFactory.getParagraphPoints()
 
             Platform.runLater {
                 cachedPoints = points
                 AnalysisContext.update(AnalysisContext.state.copy(
-                    allPoints = points,
-                    currentLayer = 3,
-                    navigationStack = emptyList())
-                )
+                    allPoints = points
+                ))
                 runAnalysisPipeline()
             }
         }
@@ -272,16 +270,16 @@ class ExplorerController {
     private fun positionClusters(points: List<VectorPoint>, ids: IntArray, clusterLayout: Map<Int, VirtualPoint>): List<VectorPoint> {
         val rng = java.util.Random()
 
-        val maxJitter = 0.04
+        val maxJitter = 0.8
 
         return points.mapIndexed { index, p ->
             val cid = ids[index]
 
-            val center = clusterLayout[cid] ?: VirtualPoint(-1, 0.5, 0.5, 0.0)
+            val center = clusterLayout[cid] ?: VirtualPoint(-1, 0.0, 0.0, 10.0)
 
             // Orbit Jitter: Scatter points around their star
             val angle = rng.nextDouble() * 2 * Math.PI
-            val radius = rng.nextDouble() * maxJitter
+            val radius = center.radius * maxJitter
 
             val localX = center.x + cos(angle) * radius
             val localY = center.y + sin(angle) * radius
@@ -476,69 +474,96 @@ class ExplorerController {
     // HIERARCHICAL NAVIGATION
     // ===============================================
     @FXML
-    fun onExplore(){
+    fun onExplore() { // Rename to onFocusSelection() if possible
         val current = AnalysisContext.state
-        if (current.selectedPoints.isEmpty())
-            return
+        if (current.selectedPoints.isEmpty()) return
 
-        // --- DOWN: identify target layer
-        val firstSelected = current.selectedPoints.first()
-        val nextLayer = firstSelected.layer - 1
-        // Return if already at "sentence" level
-        if (nextLayer < 1)
-            return
+        // 1. Find the Bounding Box of the SELECTION
+        // (Note: We use the raw projected coordinates)
+        val minX = current.selectedPoints.minOf { it.projectedX }
+        val maxX = current.selectedPoints.maxOf { it.projectedX }
+        val minY = current.selectedPoints.minOf { it.projectedY }
+        val maxY = current.selectedPoints.maxOf { it.projectedY }
 
-        val parentIds = current.selectedPoints.map { it.id }
+        // 2. Calculate the Center
+        val centerX = (minX + maxX) / 2.0
+        val centerY = (minY + maxY) / 2.0
 
-        thread(start = true) {
-            // Fetch the data we've selected for view
-            val childPoints = when (nextLayer) {
-                3 -> databaseFactory.getDocumentPoints()
-                2 -> databaseFactory.getParagraphsForDocs(parentIds)
-                1 -> databaseFactory.getSentencesForParagraphs(parentIds)
-                else -> emptyList()
-            }
+        // 3. Calculate Zoom to Fit
+        val width = maxX - minX
+        val height = maxY - minY
 
-            Platform.runLater {
-                // Save current to history
-                val historyEntry = AppState.NavigationState(cachedPoints, current.currentLayer)
+        // Add 20% padding so points aren't on the edge of the screen
+        val padding = 1.2
+        val screenW = mapCanvas.width
+        val screenH = mapCanvas.height
 
-                // Update state and local cache
-                cachedPoints = childPoints
-                AnalysisContext.update( current.copy(
-                    selectedPoints = emptySet(),
-                    currentLayer = nextLayer,
-                    navigationStack = current.navigationStack + historyEntry,
-                ))
-                updateNavButtons()
-                runAnalysisPipeline()
-            }
-        }
+        // Protect against selecting a single point (width = 0)
+        val safeWidth = if (width < 1.0) 100.0 else width
+        val safeHeight = if (height < 1.0) 100.0 else height
+
+        val zoomX = screenW / (safeWidth * padding)
+        val zoomY = screenH / (safeHeight * padding)
+
+        // Pick the smaller zoom so it fits in both dimensions
+        // Clamp it so we don't zoom in to the atomic level
+        val targetZoom = minOf(zoomX, zoomY).coerceAtMost(5.0)
+
+        // 4. Update Camera ONLY
+        val newCamera = current.camera.copy(
+            x = centerX,
+            y = centerY,
+            zoom = targetZoom
+        )
+
+        // Push current camera to stack before moving (for Back button)
+        val newHistory = current.cameraHistory + current.camera
+
+        AnalysisContext.update(current.copy(
+            camera = newCamera,
+            cameraHistory = newHistory,
+            selectedPoints = emptySet() // Clear selection
+        ))
+
+        // Force render
+        renderer.render(AnalysisContext.state)
     }
 
     @FXML
-    fun onBack() {
+    fun onBack() { // Rename to onResetView()
         val current = AnalysisContext.state
-        if (current.navigationStack.isEmpty())
-            return
 
-        val previous = current.navigationStack.last()
+        // Option A: Simple "Fit to Galaxy" (Recommended)
+        // Recalculate camera for ALL points
+        val minX = current.allPoints.minOf { it.projectedX }
+        val maxX = current.allPoints.maxOf { it.projectedX }
+        val minY = current.allPoints.minOf { it.projectedY }
+        val maxY = current.allPoints.maxOf { it.projectedY }
 
-        cachedPoints = previous.points
+        val centerX = (minX + maxX) / 2.0
+        val centerY = (minY + maxY) / 2.0
 
-        AnalysisContext.update( current.copy(
-            selectedPoints = emptySet(),
-            currentLayer = previous.layer,
-            navigationStack = current.navigationStack.dropLast(1),
+        val width = maxX - minX
+        val height = maxY - minY
+        val zoom = minOf(mapCanvas.width / width, mapCanvas.height / height) * 0.9
+
+        val homeCamera = current.camera.copy(
+            x = centerX,
+            y = centerY,
+            zoom = zoom
+        )
+
+        AnalysisContext.update(current.copy(
+            camera = homeCamera,
+            selectedPoints = emptySet() // Often nice to clear selection on reset
         ))
 
-        updateNavButtons()
-        runAnalysisPipeline()
+        renderer.render(AnalysisContext.state)
     }
 
     fun updateNavButtons() {
         val current = AnalysisContext.state
-        backButton.isDisable = current.navigationStack.isEmpty()
-        exploreButton.isDisable = current.selectedPoints.isEmpty() || current.currentLayer <= 1
+        backButton.isDisable = current.cameraHistory.isEmpty()
+        exploreButton.isDisable = current.selectedPoints.isEmpty()
     }
 }

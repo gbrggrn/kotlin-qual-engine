@@ -163,6 +163,25 @@ class ExplorerRenderer(
                 graphics.setEffect(null)
             }
         }
+
+        // ==================================================
+        // PHASE 4: SELECTION MARQUEE
+        // ==================================================
+        if (state.isDragging) {
+            val startX = minOf(state.dragStartX, state.dragCurrentX)
+            val startY = minOf(state.dragStartY, state.dragCurrentY)
+            val boxW = kotlin.math.abs(state.dragCurrentX - state.dragStartX)
+            val boxH = kotlin.math.abs(state.dragCurrentY - state.dragStartY)
+
+            // Draw semi-transparent blue box
+            graphics.fill = Color.rgb(0, 120, 255, 0.2)
+            graphics.fillRect(startX, startY, boxW, boxH)
+
+            // Draw border
+            graphics.stroke = Color.rgb(0, 120, 255, 0.8)
+            graphics.lineWidth = 1.0
+            graphics.strokeRect(startX, startY, boxW, boxH)
+        }
     }
 }
 
