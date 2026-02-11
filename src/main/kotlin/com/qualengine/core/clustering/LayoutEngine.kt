@@ -4,208 +4,262 @@ import com.qualengine.app.DependencyRegistry
 import com.qualengine.data.model.VectorPoint
 import com.qualengine.data.model.VirtualPoint
 import java.util.Random
-import kotlin.math.pow
-import kotlin.math.sqrt
+import kotlin.math.*
 
 object LayoutEngine {
 
     private val vectorMath = DependencyRegistry.vectorMath
 
-    // CONFIGURATION
-    private const val ITERATIONS = 300
-    private const val REPULSION_STRENGTH = 500.0
-    private const val ATTRACTION_STRENGTH = 0.8
-    private const val DAMPING = 0.9
-    private const val CLUSTER_RADIUS = 40.0
+    // === TUNING ===
+    private const val PHYSICS_ITERATIONS = 300
+    private const val CLUSTER_RADIUS = 50.0
+    private const val CORE_PADDING = 10.0      // Gap inside the blob
+    private const val MOAT_SIZE = 300.0        // The empty space between Blob and Outliers
 
-    // Helper for internal math (since VirtualPoint requires ID/Radius)
-    private data class Velocity(var x: Double, var y: Double)
+    // What % of clusters count as the "Dense Core"?
+    // 0.6 = The closest 60% of clusters are treated as the blob.
+    private const val CORE_RATIO = 0.6
 
-    /**
-     * Calculates the 2D positions for each Cluster ID based on semantic similarity.
-     * Returns VirtualPoints with RAW (unbounded) physics coordinates.
-     */
+    private class PhysicsNode(
+        val id: Int,
+        var x: Double,
+        var y: Double,
+        var vx: Double = 0.0,
+        var vy: Double = 0.0,
+        val radius: Double
+    )
+
     fun computeLayout(
         points: List<VectorPoint>,
         clusterIds: IntArray
     ): Map<Int, VirtualPoint> {
 
-        // 1. Prepare Nodes (Calculate Centroids)
-        val clusters = clusterIds.indices
-            .groupBy { clusterIds[it] }
-            .filter { it.key != -1 } // Ignore noise
+        // 1. INITIALIZE (Random Scatter)
+        // We start random so the physics can find the TRUE relative positions.
+        val nodes = initializeNodesRandomly(clusterIds)
+        if (nodes.isEmpty()) return emptyMap()
 
-        val nodeIds = clusters.keys.toList()
-        val nodeCount = nodeIds.size
+        // 2. INTELLIGENCE (Centroids & Similarity)
+        val centroids = calculateCentroids(points, clusterIds, nodes.keys)
+        val similarityMatrix = calculateSimilarityMatrix(nodes.keys, centroids)
 
-        // Calculate normalized centroids for cosine similarity
-        val centroids = nodeIds.associateWith { id ->
-            val indices = clusters[id]!!
-            val vectors = indices.map { points[it].embedding }
-            val raw = vectorMath.calculateCentroid(vectors)
-            normalize(raw)
+        // 3. PHASE 1: NATURAL PHYSICS
+        // Let the clusters find their natural semantic positions (Blob Right / Outliers Left)
+        val nodeList = nodes.values.toList()
+        repeat(PHYSICS_ITERATIONS) {
+            applyForces(nodeList, similarityMatrix)
+            updatePositions(nodeList)
         }
 
-        // 2. Initialize Positions (Random Scatter)
-        // We use VirtualPoint to hold the position state
-        val rng = Random()
-        val positions = nodeIds.associateWith { id ->
-            VirtualPoint(
-                clusterId = id,
-                x = rng.nextDouble() * 1000 - 500,
-                y = rng.nextDouble() * 1000 - 500,
-                radius = CLUSTER_RADIUS, // Placeholder, updated later by normalization logic
-                theme = "Processing..."
+        // 4. PHASE 2: CORE INFLATION (The "Magnifying Glass")
+        // Now that we know WHERE they are, we fix the CROWDING.
+        inflateCoreAndPushOutliers(nodeList)
+
+        // 5. PHASE 3: FINAL RESOLVE
+        // Ensure nothing is overlapping after the shift
+        resolveCollisions(nodeList)
+
+        return nodes.mapValues { (id, node) ->
+            VirtualPoint(id, node.x, node.y, node.radius, "Processing...")
+        }
+    }
+
+    // ========================================================
+    // THE NEW LOGIC: INFLATION
+    // ========================================================
+    private fun inflateCoreAndPushOutliers(nodes: List<PhysicsNode>) {
+        // 1. Find the Universe Center
+        val centerX = nodes.map { it.x }.average()
+        val centerY = nodes.map { it.y }.average()
+
+        // 2. Sort by distance from center to identify Core vs Outliers
+        val sortedByDist = nodes.sortedBy {
+            val dx = it.x - centerX
+            val dy = it.y - centerY
+            dx*dx + dy*dy
+        }
+
+        val splitIndex = (nodes.size * CORE_RATIO).toInt().coerceAtLeast(1)
+        val coreNodes = sortedByDist.take(splitIndex)
+        val outlierNodes = sortedByDist.drop(splitIndex)
+
+        // 3. Measure the Core's Natural Size
+        // How far out does the blob currently extend?
+        val currentCoreRadius = coreNodes.maxOfOrNull {
+            hypot(it.x - centerX, it.y - centerY)
+        } ?: 100.0
+
+        // 4. Calculate Required Size
+        // If we packed them perfectly, how much space do we actually need?
+        // Area = Count * (Radius + Padding)^2
+        val requiredArea = coreNodes.size * (CLUSTER_RADIUS * 2 + CORE_PADDING).pow(2)
+        val requiredRadius = sqrt(requiredArea) * 1.2 // Add 20% breathing room
+
+        // 5. Calculate Scale Factor
+        // "We need to be 3x bigger"
+        val scaleFactor = (requiredRadius / currentCoreRadius).coerceAtLeast(1.0)
+
+        // 6. APPLY TRANSFORMATION
+
+        // A. EXPAND THE CORE
+        // We push core nodes out to give them space, but keep relative angles.
+        for (node in coreNodes) {
+            val dx = node.x - centerX
+            val dy = node.y - centerY
+
+            // Linear expansion
+            node.x = centerX + (dx * scaleFactor)
+            node.y = centerY + (dy * scaleFactor)
+        }
+
+        // B. PUSH THE OUTLIERS
+        // We push them so they stay OUTSIDE the new core radius + MOAT
+        val newCoreEdge = requiredRadius
+
+        for (node in outlierNodes) {
+            val dx = node.x - centerX
+            val dy = node.y - centerY
+            val dist = hypot(dx, dy)
+            val angle = atan2(dy, dx)
+
+            // The outlier's new distance is:
+            // The New Core Edge + The Moat + Its Original "Extra" Distance
+            val originalGap = (dist - currentCoreRadius).coerceAtLeast(0.0)
+            val newDist = newCoreEdge + MOAT_SIZE + (originalGap * 1.5) // 1.5x to exaggerate distance slightly
+
+            node.x = centerX + cos(angle) * newDist
+            node.y = centerY + sin(angle) * newDist
+        }
+    }
+
+    // ========================================================
+    // STANDARD PHYSICS (Preserved)
+    // ========================================================
+    private fun initializeNodesRandomly(ids: IntArray): Map<Int, PhysicsNode> {
+        val validIds = ids.filter { it != -1 }.distinct()
+        val rng = Random(123) // Deterministic Seed for "Left is Left" consistency
+        return validIds.associateWith { id ->
+            PhysicsNode(
+                id,
+                (rng.nextDouble() - 0.5) * 100.0,
+                (rng.nextDouble() - 0.5) * 100.0,
+                radius = CLUSTER_RADIUS
             )
         }
+    }
 
-        // Initialize Velocities (Internal helper)
-        val velocities = nodeIds.associateWith { Velocity(0.0, 0.0) }
+    private fun applyForces(nodes: List<PhysicsNode>, similarityMatrix: Map<Int, Map<Int, Double>>) {
+        for (i in nodes.indices) {
+            val n1 = nodes[i]
+            // Gravity
+            n1.vx -= n1.x * 0.01
+            n1.vy -= n1.y * 0.01
 
-        // 3. Pre-calculate Similarities (The "Springs")
-        val similarityMatrix = Array(nodeCount) { DoubleArray(nodeCount) }
-        for (i in 0 until nodeCount) {
-            for (j in i + 1 until nodeCount) {
-                val idA = nodeIds[i]
-                val idB = nodeIds[j]
+            for (j in i + 1 until nodes.size) {
+                val n2 = nodes[j]
+                val dx = n1.x - n2.x
+                val dy = n1.y - n2.y
+                val distSq = dx*dx + dy*dy
+                val dist = sqrt(distSq).coerceAtLeast(1.0)
+                val sim = similarityMatrix[n1.id]!![n2.id] ?: 0.0
 
-                val vecA = centroids[idA]!!
-                val vecB = centroids[idB]!!
+                // Repulsion
+                val repulsion = (800.0 * (1.0 - sim)) / dist
+                n1.vx += (dx/dist) * repulsion
+                n1.vy += (dy/dist) * repulsion
+                n2.vx -= (dx/dist) * repulsion
+                n2.vy -= (dy/dist) * repulsion
 
-                val sim = vectorMath.dotProduct(vecA, vecB)
-
-                // Only link if similarity is relevant (> 0.5)
-                // Square it to emphasize strong connections
-                val weight = if (sim > 0.5) sim.pow(2) else 0.0
-
-                similarityMatrix[i][j] = weight
-                similarityMatrix[j][i] = weight
+                // Attraction
+                if (sim > 0.6) {
+                    val attraction = (dist * 0.05) * sim
+                    n1.vx -= (dx/dist) * attraction
+                    n1.vy -= (dy/dist) * attraction
+                    n2.vx += (dx/dist) * attraction
+                    n2.vy += (dy/dist) * attraction
+                }
             }
         }
+    }
 
-        // 4. Run Physics Simulation
-        repeat(ITERATIONS) {
-
-            // A. Repulsion (Coulomb's Law)
-            for (i in 0 until nodeCount) {
-                val idA = nodeIds[i]
-                val posA = positions[idA]!!
-                val velA = velocities[idA]!!
-
-                var fx = 0.0
-                var fy = 0.0
-
-                for (j in 0 until nodeCount) {
-                    if (i == j) continue
-                    val idB = nodeIds[j]
-                    val posB = positions[idB]!!
-
-                    val dx = posA.x - posB.x
-                    val dy = posA.y - posB.y
-                    val distSq = dx * dx + dy * dy
-                    val dist = sqrt(distSq).coerceAtLeast(0.1)
-
-                    val force = REPULSION_STRENGTH / dist
-                    fx += (dx / dist) * force
-                    fy += (dy / dist) * force
-                }
-
-                velA.x += fx
-                velA.y += fy
-            }
-
-            // B. Attraction (Hooke's Law)
-            for (i in 0 until nodeCount) {
-                val idA = nodeIds[i]
-                val posA = positions[idA]!!
-                val velA = velocities[idA]!!
-
-                for (j in 0 until nodeCount) {
-                    if (i == j) continue
-                    val weight = similarityMatrix[i][j]
-                    if (weight <= 0.0) continue
-
-                    val idB = nodeIds[j]
-                    val posB = positions[idB]!!
-
-                    val dx = posB.x - posA.x
-                    val dy = posB.y - posA.y
-
-                    velA.x += dx * weight * ATTRACTION_STRENGTH
-                    velA.y += dy * weight * ATTRACTION_STRENGTH
-                }
-            }
-
-            // C. Gravity (Center Pull) & Update
-            for (id in nodeIds) {
-                val pos = positions[id]!!
-                val vel = velocities[id]!!
-
-                // Gravity
-                vel.x -= pos.x * 0.005
-                vel.y -= pos.y * 0.005
-
-                // Damping (Friction)
-                vel.x *= DAMPING
-                vel.y *= DAMPING
-
-                // Speed Limit
-                val speed = sqrt(vel.x * vel.x + vel.y * vel.y)
-                if (speed > 50.0) {
-                    vel.x = (vel.x / speed) * 50.0
-                    vel.y = (vel.y / speed) * 50.0
-                }
-
-                // Apply
-                pos.x += vel.x
-                pos.y += vel.y
-            }
+    private fun updatePositions(nodes: List<PhysicsNode>) {
+        for (n in nodes) {
+            n.x += n.vx
+            n.y += n.vy
+            n.vx *= 0.8 // Damping
+            n.vy *= 0.8
         }
+    }
 
-        // Physics got us 90% there. Now we force circles apart if they are touching.
-        val collisionIterations = 50
-        val nodeValues = positions.values.toList()
-
-        repeat(collisionIterations) {
-            for (i in nodeValues.indices) {
-                val n1 = nodeValues[i]
-                for (j in i + 1 until nodeValues.size) {
-                    val n2 = nodeValues[j]
-
+    private fun resolveCollisions(nodes: List<PhysicsNode>) {
+        repeat(50) {
+            for (i in nodes.indices) {
+                val n1 = nodes[i]
+                for (j in i + 1 until nodes.size) {
+                    val n2 = nodes[j]
                     val dx = n1.x - n2.x
                     val dy = n1.y - n2.y
-                    val distSq = dx * dx + dy * dy
-                    val dist = sqrt(distSq)
-
-                    // Allow slight overlap by 10%
-                    val combinedRadius = n1.radius + n2.radius
-                    val minDist = combinedRadius * 0.9
+                    val dist = hypot(dx, dy)
+                    val minDist = n1.radius + n2.radius + CORE_PADDING
 
                     if (dist < minDist && dist > 0.001) {
-                        // Calculate how much they overlap
                         val overlap = minDist - dist
-
-                        // Push them apart proportional to the overlap
-                        // Each node moves half the overlap distance away
-                        val moveX = (dx / dist) * overlap * 0.5
-                        val moveY = (dy / dist) * overlap * 0.5
-
-                        n1.x += moveX
-                        n1.y += moveY
-                        n2.x -= moveX
-                        n2.y -= moveY
+                        val pushX = (dx/dist) * overlap * 0.5
+                        val pushY = (dy/dist) * overlap * 0.5
+                        n1.x += pushX
+                        n1.y += pushY
+                        n2.x -= pushX
+                        n2.y -= pushY
                     }
                 }
             }
         }
+    }
 
-        return positions
+    // (Helper methods calculateCentroids, calculateSimilarityMatrix, normalize remain the same)
+    private fun calculateCentroids(
+        points: List<VectorPoint>,
+        ids: IntArray,
+        nodeIds: Set<Int>
+    ): Map<Int, DoubleArray> {
+        val pointsByCluster = points.indices.groupBy { ids[it] }
+
+        return nodeIds.associateWith { id ->
+            val indices = pointsByCluster[id] ?: emptyList()
+            val vectors = indices.map { points[it].embedding }
+            val raw = vectorMath.calculateCentroid(vectors)
+            normalize(raw)
+        }
+    }
+
+    private fun calculateSimilarityMatrix(
+        nodeIds: Set<Int>,
+        centroids: Map<Int, DoubleArray>
+    ): Map<Int, Map<Int, Double>> {
+        val list = nodeIds.toList()
+        val matrix = mutableMapOf<Int, MutableMap<Int, Double>>()
+
+        for (id in list) matrix[id] = mutableMapOf()
+
+        for (i in list.indices) {
+            for (j in i + 1 until list.size) {
+                val idA = list[i]
+                val idB = list[j]
+
+                val sim = vectorMath.dotProduct(centroids[idA]!!, centroids[idB]!!)
+                val cleanSim = sim.coerceAtLeast(0.0)
+
+                matrix[idA]!![idB] = cleanSim
+                matrix[idB]!![idA] = cleanSim
+            }
+        }
+        return matrix
     }
 
     private fun normalize(v: DoubleArray): DoubleArray {
         var sum = 0.0
         for (d in v) sum += d * d
-        val mag = sqrt(sum)
+        val mag = kotlin.math.sqrt(sum)
         if (mag == 0.0) return v
         return DoubleArray(v.size) { i -> v[i] / mag }
     }
