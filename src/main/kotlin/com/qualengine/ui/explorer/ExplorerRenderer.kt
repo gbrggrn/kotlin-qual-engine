@@ -1,7 +1,9 @@
 package com.qualengine.ui.explorer
 
+import com.qualengine.app.DependencyRegistry
 import com.qualengine.data.model.AppState
 import com.qualengine.data.model.VectorPoint
+import javafx.geometry.Point2D
 import javafx.geometry.VPos
 import javafx.scene.canvas.Canvas
 import javafx.scene.paint.Color
@@ -14,6 +16,8 @@ class ExplorerRenderer(
     private val canvas: Canvas,
     private val coordinateMapper: CoordinateMapper
 ) {
+
+    private val geometryMath = DependencyRegistry.geometryMath
 
     // Helper: Distinct colors for clusters
     private fun getClusterColor(id: Int, opacity: Double = 1.0): Color {
@@ -51,13 +55,27 @@ class ExplorerRenderer(
         // Zoom > 0.2  : Region View (Points appear as dots)
         // Zoom > 1.5  : Street View (Text snippets appear)
         val showHulls = true
-        val showPoints = zoom > 0.2
+        val showPoints = zoom > 0.4
         val showDetails = zoom > 1.5
+        val isGalaxyView = zoom < 0.8
         val fadeClusterLabels = zoom > 2.0 // Hide big theme labels when deep in the weeds
 
         // ==================================================
         // PHASE 1: THE TERRITORIES (Hulls)
         // ==================================================
+        if (isGalaxyView){
+            // === GALAXY VIEW ===
+
+            // 1. Draw The "Blob" (Super-Hull)
+            drawSuperHull(graphics, state, state.coreClusterIds, Color.rgb(100, 150, 255, 0.2))
+
+            // 2. Draw The Outliers (Normal Hulls, but maybe simpler?)
+            // For now, let's just draw their normal hulls to show they are distinct
+            for (set in state.outlierClusterIds) {
+                drawSuperHull(graphics, state, set, Color.rgb(100, 150, 255, 0.2))
+            }
+        }
+
         if (showHulls) {
             for ((id, shapePoints) in state.clusterShapes) {
                 if (shapePoints.isEmpty()) continue
@@ -197,6 +215,40 @@ class ExplorerRenderer(
             graphics.lineWidth = 1.0
             graphics.strokeRect(startX, startY, boxW, boxH)
         }
+    }
+
+    private fun drawSuperHull(g: javafx.scene.canvas.GraphicsContext, state: AppState, clusterIds: Set<Int>, color: Color) {
+        if (clusterIds.isEmpty()) return
+
+        // 1. Collect ALL points from ALL core clusters
+        val allCorePoints = state.allPoints.filter { it.clusterId in clusterIds }
+        if (allCorePoints.isEmpty()) return
+
+        // 2. Calculate the Convex Hull of this mega-group
+        // (You might need to expose your GeometryUtils.computeConvexHull to the renderer
+        //  or pre-calculate this in the Controller if performance lags)
+        val rawPoints = allCorePoints.map { Point2D(it.projectedX, it.projectedY) }
+        val hull = geometryMath.computeConvexHull(rawPoints)
+        val smoothHull = geometryMath.smoothPolygon(hull, iterations = 6)
+
+        // 3. Draw
+        g.beginPath()
+        if (smoothHull.isNotEmpty()) {
+            val start = coordinateMapper.worldToScreen(smoothHull[0].x, smoothHull[0].y, state.camera)
+            g.moveTo(start.x, start.y)
+            for (p in smoothHull.drop(1)) {
+                val sc = coordinateMapper.worldToScreen(p.x, p.y, state.camera)
+                g.lineTo(sc.x, sc.y)
+            }
+            g.closePath()
+        }
+
+        g.fill = color
+        g.fill()
+
+        g.stroke = color.brighter()
+        g.lineWidth = 3.0
+        g.stroke()
     }
 }
 

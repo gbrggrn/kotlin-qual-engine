@@ -29,15 +29,22 @@ object LayoutEngine {
         val radius: Double
     )
 
+    data class LayoutResult(
+        val positions: Map<Int, VirtualPoint> = emptyMap(),
+        val coreIds: Set<Int> = emptySet(),
+        val outlierIds: List<Set<Int>> = emptyList()
+    )
+
     fun computeLayout(
         points: List<VectorPoint>,
         clusterIds: IntArray
-    ): Map<Int, VirtualPoint> {
+    ): LayoutResult {
 
         // 1. INITIALIZE (Random Scatter)
         // We start random so the physics can find the TRUE relative positions.
         val nodes = initializeNodesRandomly(clusterIds)
-        if (nodes.isEmpty()) return emptyMap()
+        if (nodes.isEmpty())
+            return LayoutResult()
 
         // 2. INTELLIGENCE (Centroids & Similarity)
         val centroids = calculateCentroids(points, clusterIds, nodes.keys)
@@ -53,21 +60,29 @@ object LayoutEngine {
 
         // 4. PHASE 2: CORE INFLATION (The "Magnifying Glass")
         // Now that we know WHERE they are, we fix the CROWDING.
-        inflateCoreAndPushOutliers(nodeList)
+        val (coreIds, outlierNodes) = inflateCoreAndPushOutliers(nodeList)
+
+        val outlierIds = identifyIslands(outlierNodes, gapThreshold = 300.0)
 
         // 5. PHASE 3: FINAL RESOLVE
         // Ensure nothing is overlapping after the shift
         resolveCollisions(nodeList)
 
-        return nodes.mapValues { (id, node) ->
-            VirtualPoint(id, node.x, node.y, node.radius, "Processing...")
+        val positionsMap = nodes.mapValues { (id, node) ->
+            VirtualPoint(id, node.x, node.y, node.radius, "Processing")
         }
+
+        return LayoutResult(
+            positions = positionsMap,
+            coreIds = coreIds,
+            outlierIds = outlierIds
+        )
     }
 
     // ========================================================
     // THE NEW LOGIC: INFLATION
     // ========================================================
-    private fun inflateCoreAndPushOutliers(nodes: List<PhysicsNode>) {
+    private fun inflateCoreAndPushOutliers(nodes: List<PhysicsNode>): Pair<Set<Int>, List<PhysicsNode>> {
         // 1. Find the Universe Center
         val centerX = nodes.map { it.x }.average()
         val centerY = nodes.map { it.y }.average()
@@ -76,7 +91,7 @@ object LayoutEngine {
         val sortedByDist = nodes.sortedBy {
             val dx = it.x - centerX
             val dy = it.y - centerY
-            dx*dx + dy*dy
+            dx * dx + dy * dy
         }
 
         val splitIndex = (nodes.size * CORE_RATIO).toInt().coerceAtLeast(1)
@@ -130,7 +145,46 @@ object LayoutEngine {
             node.x = centerX + cos(angle) * newDist
             node.y = centerY + sin(angle) * newDist
         }
+
+        val coreIds = coreNodes.map { it.id }.toSet()
+        return Pair(coreIds, outlierNodes)
     }
+
+    // Group nodes into islands based on spatial proximity
+    private fun identifyIslands(nodes: List<PhysicsNode>, gapThreshold: Double): List<Set<Int>> {
+        val visited = mutableSetOf<Int>()
+        val islands = mutableListOf<Set<Int>>()
+
+        for (node in nodes) {
+            if (node.id in visited) continue
+
+            // Start a new Island
+            val currentIsland = mutableSetOf<Int>()
+            val queue = ArrayDeque<PhysicsNode>()
+            queue.add(node)
+            visited.add(node.id)
+
+            while (!queue.isEmpty()) {
+                val current = queue.removeFirst()
+                currentIsland.add(current.id)
+
+                // Find neighbors
+                for (other in nodes) {
+                    if (other.id !in visited) {
+                        val dist = hypot(current.x - other.x, current.y - other.y)
+                        // If visually close enough to be considered a "Group"
+                        if (dist < gapThreshold) {
+                            visited.add(other.id)
+                            queue.add(other)
+                        }
+                    }
+                }
+            }
+            islands.add(currentIsland)
+        }
+        return islands
+    }
+
 
     // ========================================================
     // STANDARD PHYSICS (Preserved)

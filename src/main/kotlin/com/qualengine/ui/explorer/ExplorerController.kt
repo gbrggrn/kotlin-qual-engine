@@ -228,27 +228,29 @@ class ExplorerController {
             // Compute the layout (returns Map<Int, VirtualPoint>)
             val clusterLayout = layoutEngine.computeLayout(workingPoints, finalClusterIds)
             // Position points around normalized cluster centerpoints
-            val finalPoints = positionClusters(workingPoints, finalClusterIds, clusterLayout)
+            val finalPoints = positionClusters(workingPoints, finalClusterIds, clusterLayout.positions)
             // Generate organic "hulls" that wrap around the clusters
-            val clusterShapes = createClusterHulls(finalPoints, finalClusterIds, clusterLayout)
+            val clusterShapes = createClusterHulls(finalPoints, finalClusterIds, clusterLayout.positions)
 
             // === COMMIT TO STATE ===
             Platform.runLater {
                 // Initialize labels as placeholders. User can trigger AI Labeling later.
-                val initialThemes = clusterLayout.keys.associateWith { "Processing..." }
+                val initialThemes = clusterLayout.positions.keys.associateWith { "Processing..." }
 
                 val initialCamera = calculateFitToScreenCamera(
-                    clusterLayout,
+                    clusterLayout.positions,
                     mapCanvas.width,
                     mapCanvas.height
                 )
 
                 val newState = AnalysisContext.state.copy(
                     allPoints = finalPoints,
-                    clusterCenters = clusterLayout,
+                    clusterCenters = clusterLayout.positions,
                     clusterThemes = initialThemes,
                     clusterShapes = clusterShapes,
-                    camera = initialCamera
+                    camera = initialCamera,
+                    coreClusterIds = clusterLayout.coreIds,
+                    outlierClusterIds = clusterLayout.outlierIds
                 )
 
                 // Update Global State
@@ -263,7 +265,7 @@ class ExplorerController {
 
                 // Log Results
                 println("--- Analysis Complete ---")
-                println("Clusters Created: ${clusterLayout.size}")
+                println("Clusters Created: ${clusterLayout.positions.size}")
                 println("Points Processed: ${finalPoints.size}")
             }
 
