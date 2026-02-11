@@ -85,7 +85,6 @@ class ExplorerRenderer(
                     graphics.lineTo(p.x, p.y)
                 }
 
-                // CRITICAL FIX: Close the Path!
                 // Connects the last point back to the first.
                 graphics.closePath()
 
@@ -108,13 +107,13 @@ class ExplorerRenderer(
                 val screenPos = coordinateMapper.worldToScreen(point.projectedX, point.projectedY, camera)
 
                 // Cull off-screen points
-                if (screenPos.x < -10 || screenPos.x > width + 10 ||
-                    screenPos.y < -10 || screenPos.y > height + 10) {
+                if (screenPos.x < -50 || screenPos.x > width + 50 ||
+                    screenPos.y < -50 || screenPos.y > height + 50) {
                     continue
                 }
 
                 // Size scales slightly with zoom, but clamps to avoid becoming huge
-                val pointSize = (4.0 * zoom).coerceIn(2.0, 12.0)
+                val pointSize = (2.0 * (zoom * 2.0)).coerceIn(2.0, 12.0)
                 val pointColor = getSourceColor(point, 0.9)
 
                 // VISUAL STATES
@@ -147,7 +146,7 @@ class ExplorerRenderer(
                 // DETAILED TEXT (Only at high zoom)
                 if (showDetails) {
                     graphics.fill = Color.rgb(255, 255, 255, 0.7)
-                    graphics.font = Font.font("Arial", 10.0)
+                    graphics.font = Font.font("Arial", 12.0)
                     // Draw snippet
                     val text = point.metaData.take(15)
                     graphics.fillText(text, screenPos.x + 8, screenPos.y + 4)
