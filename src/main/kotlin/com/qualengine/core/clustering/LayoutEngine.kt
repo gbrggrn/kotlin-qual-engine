@@ -32,7 +32,8 @@ object LayoutEngine {
     data class LayoutResult(
         val positions: Map<Int, VirtualPoint> = emptyMap(),
         val coreIds: Set<Int> = emptySet(),
-        val outlierIds: List<Set<Int>> = emptyList()
+        val outlierIds: List<Set<Int>> = emptyList(),
+        val clusterConnections: Map<Int, List<Int>> = emptyMap()
     )
 
     fun computeLayout(
@@ -49,6 +50,19 @@ object LayoutEngine {
         // 2. INTELLIGENCE (Centroids & Similarity)
         val centroids = calculateCentroids(points, clusterIds, nodes.keys)
         val similarityMatrix = calculateSimilarityMatrix(nodes.keys, centroids)
+
+        // Calculate and save connections between clusters (to be presented on hover)
+        val clusterConnections = mutableMapOf<Int, List<Int>>()
+        for ((idA, row) in similarityMatrix) {
+            val friends = mutableListOf<Int>()
+            for ((idB, sim) in row) {
+                if (sim > 0.6) {
+                    friends.add(idB)
+                }
+            }
+            if (friends.isNotEmpty())
+                clusterConnections[idA] = friends
+        }
 
         // 3. PHASE 1: NATURAL PHYSICS
         // Let the clusters find their natural semantic positions (Blob Right / Outliers Left)
@@ -75,7 +89,8 @@ object LayoutEngine {
         return LayoutResult(
             positions = positionsMap,
             coreIds = coreIds,
-            outlierIds = outlierIds
+            outlierIds = outlierIds,
+            clusterConnections = clusterConnections
         )
     }
 
