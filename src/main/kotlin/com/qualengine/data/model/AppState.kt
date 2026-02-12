@@ -31,6 +31,7 @@ data class AppState(
     val clusterThemes: Map<Int, String> = emptyMap(),
     val coreClusterIds: Set<Int> = emptySet(),
     val outlierClusterIds: List<Set<Int>> = emptyList(),
+    val clusterConnections: Map<Int, List<Int>> = emptyMap(),
 
     // --- NAVIGATION STATE ---
     val cameraHistory: List<Camera> = emptyList(),
