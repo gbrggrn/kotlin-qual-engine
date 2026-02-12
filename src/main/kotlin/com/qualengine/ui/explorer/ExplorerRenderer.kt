@@ -61,7 +61,7 @@ class ExplorerRenderer(
         val fadeClusterLabels = zoom > 2.0 // Hide big theme labels when deep in the weeds
 
         // ==================================================
-        // PHASE 1: THE TERRITORIES (Hulls)
+        // THE TERRITORIES (Hulls)
         // ==================================================
         if (isGalaxyView){
             // === GALAXY VIEW ===
@@ -117,8 +117,43 @@ class ExplorerRenderer(
             }
         }
 
+        // =========================
+        // THE CONNECTIONS (Lines between clusters)
+        // =========================
+        val hoveredId = state.hoveredPoint?.clusterId
+
+        if (hoveredId != null) {
+            val relatedIds = state.clusterConnections[hoveredId] ?: emptyList()
+
+            // Draw lines to all related clusters
+            graphics.stroke = Color.rgb(255, 255, 255, 0.4) // Faint white
+            graphics.lineWidth = 1.5
+
+            val start = state.clusterCenters[hoveredId]
+
+            if (start != null) {
+                val startScreen = coordinateMapper.worldToScreen(start.x, start.y, camera)
+
+                for (friendId in relatedIds) {
+                    val end = state.clusterCenters[friendId] ?: continue
+                    val endScreen = coordinateMapper.worldToScreen(end.x, end.y, camera)
+
+                    // Draw a Quadratic Curve for elegance (straight lines look stiff)
+                    graphics.beginPath()
+                    graphics.moveTo(startScreen.x, startScreen.y)
+
+                    // Control point: Midpoint but offset slightly (visual flair)
+                    val cx = (startScreen.x + endScreen.x) / 2
+                    val cy = (startScreen.y + endScreen.y) / 2 - 20.0 // slight arch
+
+                    graphics.quadraticCurveTo(cx, cy, endScreen.x, endScreen.y)
+                    graphics.stroke()
+                }
+            }
+        }
+
         // ==================================================
-        // PHASE 2: THE POPULATION (Points)
+        // THE POPULATION (Points)
         // ==================================================
         if (showPoints) {
             for (point in state.allPoints) {
