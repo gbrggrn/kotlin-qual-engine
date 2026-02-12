@@ -250,7 +250,8 @@ class ExplorerController {
                     clusterShapes = clusterShapes,
                     camera = initialCamera,
                     coreClusterIds = clusterLayout.coreIds,
-                    outlierClusterIds = clusterLayout.outlierIds
+                    outlierClusterIds = clusterLayout.outlierIds,
+                    clusterConnections = clusterLayout.clusterConnections
                 )
 
                 // Update Global State
