@@ -28,10 +28,14 @@ data class AppState(
 
     // --- CLUSTERING DATA ---
     val clusterCenters: Map<Int, VirtualPoint> = emptyMap(),
-    val clusterThemes: Map<Int, String> = emptyMap(),
     val coreClusterIds: Set<Int> = emptySet(),
     val outlierClusterIds: List<Set<Int>> = emptyList(),
     val clusterConnections: Map<Int, List<Int>> = emptyMap(),
+
+    // --- LABEL DATA ---
+    val clusterLabels: Map<Int, String> = emptyMap(),
+    val coreLabel: String,
+    val outlierLabels: Map<Int, String> = emptyMap(),
 
     // --- NAVIGATION STATE ---
     val cameraHistory: List<Camera> = emptyList(),

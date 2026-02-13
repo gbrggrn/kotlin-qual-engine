@@ -233,6 +233,23 @@ class ExplorerController {
             // Generate organic "hulls" that wrap around the clusters
             val clusterShapes = createClusterHulls(finalPoints, finalClusterIds, clusterLayout.positions)
 
+            // === LABELS ===
+            val backgroundSample = finalPoints.shuffled().take(500).map { it.enrichedMetaData }
+            Platform.runLater { analyzingStatusLabel.text = "Generating themes..." }
+            // Cluster labels
+            val clusterLabels = finalClusterIds.distinct().filter { it != -1 }.associateWith { id ->
+                val clusterMetaData = finalPoints.filter { it.clusterId == id }.map { it.enrichedMetaData }
+                labelGenerator.generateLabel(clusterMetaData, backgroundSample)
+            }
+            // Core label
+            val coreDocs = finalPoints.filter { it.clusterId in clusterLayout.coreIds }.map { it.enrichedMetaData }
+            val coreLabel = labelGenerator.generateLabel(coreDocs, backgroundSample)
+            // Outlier hull labels
+            val outlierLabels = clusterLayout.outlierIds.mapIndexed { index, ids ->
+                val islandDocs = finalPoints.filter { it.clusterId in ids }.map { it.enrichedMetaData }
+                index to labelGenerator.generateLabel(islandDocs, backgroundSample)
+            }.toMap()
+
             // === COMMIT TO STATE ===
             Platform.runLater {
                 // Initialize labels as placeholders. User can trigger AI Labeling later.
@@ -247,12 +264,14 @@ class ExplorerController {
                 val newState = AnalysisContext.state.copy(
                     allPoints = finalPoints,
                     clusterCenters = clusterLayout.positions,
-                    clusterThemes = initialThemes,
                     clusterShapes = clusterShapes,
                     camera = initialCamera,
                     coreClusterIds = clusterLayout.coreIds,
                     outlierClusterIds = clusterLayout.outlierIds,
-                    clusterConnections = clusterLayout.clusterConnections
+                    clusterConnections = clusterLayout.clusterConnections,
+                    clusterLabels = clusterLabels,
+                    coreLabel = coreLabel,
+                    outlierLabels = outlierLabels
                 )
 
                 // Update Global State
