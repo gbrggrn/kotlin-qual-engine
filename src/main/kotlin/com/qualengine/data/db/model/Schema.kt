@@ -29,6 +29,7 @@ object Paragraphs : Table() {
     val id = varchar("id", 50)
     val docId = reference("doc_id", Documents.id)
     val content = text("content")
+    val enrichedContent = text("enrichedContent")
     val index = integer("index")
     val vector = text("vector").nullable()
 

@@ -137,11 +137,21 @@ object Refinery {
 
                 // --- SAVE ---
                 val paragraphId = UUID.randomUUID().toString()
-                saveBlockAsParagraph(paragraphId, docId, currentBlock.rawText, blockIndex++, finalVector, sanity)
+                saveBlockAsParagraph(
+                    paragraphId,
+                    docId,
+                    currentBlock.rawText,
+                    enrichedText,
+                    blockIndex++,
+                    finalVector,
+                    sanity)
 
                 // Break down into sentences for quotes
                 if (sanity == SanityStatus.CLEAN) {
-                    processSentences(paragraphId, docId, currentBlock.rawText)
+                    processSentences(
+                        paragraphId, 
+                        docId,
+                        currentBlock.rawText)
                 }
             }
             if (blockIndex % 5 == 0)
@@ -186,6 +196,7 @@ object Refinery {
         pId: String,
         dId: String,
         text: String,
+        enrichedText: String,
         idx: Int,
         vec: DoubleArray,
         status: SanityStatus
@@ -195,6 +206,7 @@ object Refinery {
                 it[this.id] = pId
                 it[this.docId] = dId
                 it[content] = text
+                it[enrichedContent] = enrichedText
                 it[index] = idx
                 it[this.vector] = vec.joinToString(",")
                 it[this.status] = status.name
