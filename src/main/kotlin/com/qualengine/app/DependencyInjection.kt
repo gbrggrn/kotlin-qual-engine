@@ -1,6 +1,7 @@
 package com.qualengine.app
 
 import com.qualengine.core.AnalysisContext
+import com.qualengine.core.analysis.LabelGenerator
 import com.qualengine.core.analysis.OllamaEnricher
 import com.qualengine.core.analysis.SanityFilter
 import com.qualengine.core.analysis.SemanticCompressor
@@ -45,6 +46,7 @@ object DependencyRegistry {
     // - Data ingestion
     val refinery by lazy { Refinery }
     val textSanitizer by lazy { TextSanitizer }
+    val labelGenerator by lazy { LabelGenerator }
 
     // ====================
     // UI & INTERACTION
