@@ -37,6 +37,7 @@ class ExplorerController {
     private val clusterRefiner = DependencyRegistry.clusterRefiner
     private val layoutEngine = DependencyRegistry.layoutEngine
     private val geometryMath = DependencyRegistry.geometryMath
+    private val labelGenerator = DependencyRegistry.labelGenerator
     private lateinit var renderer: ExplorerRenderer
     private lateinit var pipeline: InputPipeline
     private lateinit var coordinateMapper: CoordinateMapper
