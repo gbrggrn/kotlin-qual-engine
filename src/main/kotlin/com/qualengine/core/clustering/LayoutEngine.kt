@@ -15,6 +15,7 @@ object LayoutEngine {
     private const val CLUSTER_RADIUS = 50.0
     private const val CORE_PADDING = 10.0      // Gap inside the blob
     private const val MOAT_SIZE = 300.0        // The empty space between Blob and Outliers
+    private const val CONNECTION_SENSITIVITY = 0.9 // Higher = less connections | Lower = more connections
 
     // What % of clusters count as the "Dense Core"?
     // 0.6 = The closest 60% of clusters are treated as the blob.
@@ -56,7 +57,7 @@ object LayoutEngine {
         for ((idA, row) in similarityMatrix) {
             val friends = mutableListOf<Int>()
             for ((idB, sim) in row) {
-                if (sim > 0.6) {
+                if (sim > CONNECTION_SENSITIVITY) {
                     friends.add(idB)
                 }
             }
@@ -95,7 +96,7 @@ object LayoutEngine {
     }
 
     // ========================================================
-    // THE NEW LOGIC: INFLATION
+    // INFLATION
     // ========================================================
     private fun inflateCoreAndPushOutliers(nodes: List<PhysicsNode>): Pair<Set<Int>, List<PhysicsNode>> {
         // 1. Find the Universe Center
@@ -202,7 +203,7 @@ object LayoutEngine {
 
 
     // ========================================================
-    // STANDARD PHYSICS (Preserved)
+    // STANDARD PHYSICS
     // ========================================================
     private fun initializeNodesRandomly(ids: IntArray): Map<Int, PhysicsNode> {
         val validIds = ids.filter { it != -1 }.distinct()
