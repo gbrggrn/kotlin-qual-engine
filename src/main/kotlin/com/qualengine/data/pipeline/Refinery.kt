@@ -149,7 +149,7 @@ object Refinery {
                 // Break down into sentences for quotes
                 if (sanity == SanityStatus.CLEAN) {
                     processSentences(
-                        paragraphId, 
+                        paragraphId,
                         docId,
                         currentBlock.rawText)
                 }

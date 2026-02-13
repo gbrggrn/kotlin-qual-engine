@@ -8,7 +8,8 @@ data class VectorPoint(
     val clusterId: Int = -1,
     val metaData: String,
     val layer: Int, // 1: Sentence, 2: Paragraph 3: Document
-    val parentId: String?
+    val parentId: String?,
+    val enrichedMetaData: String
 ) {
     // Update hashCode/equals if you overrode them (String handles equality natively)
     override fun equals(other: Any?): Boolean {
@@ -22,6 +23,7 @@ data class VectorPoint(
         if (clusterId != other.clusterId) return false
         if (layer != other.layer) return false
         if (parentId != other.parentId) return false
+        if (enrichedMetaData != other.enrichedMetaData) return false
         return true
     }
 
