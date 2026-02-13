@@ -343,81 +343,6 @@ class ExplorerController {
         return Pair(bestClusterIds, bestEpsilon)
     }
 
-    private fun normalizeLayout(rawLayout: Map<Int, VirtualPoint>): Map<Int, VirtualPoint> {
-        if (rawLayout.isEmpty()) return rawLayout
-
-        // 1. Find the boundaries of the physics universe
-        val minX = rawLayout.values.minOf { it.x }
-        val maxX = rawLayout.values.maxOf { it.x }
-        val minY = rawLayout.values.minOf { it.y }
-        val maxY = rawLayout.values.maxOf { it.y }
-
-        // Avoid divide-by-zero if there's only 1 cluster
-        val width = (maxX - minX).coerceAtLeast(1.0)
-        val height = (maxY - minY).coerceAtLeast(1.0)
-
-        // 2. Padding (Keep clusters 5% away from the edge)
-        val padding = 0.05
-
-        // 3. Create a new map with normalized coordinates
-        return rawLayout.mapValues { (_, vp) ->
-            val normX = padding + ((vp.x - minX) / width) * (1.0 - padding * 2)
-            val normY = padding + ((vp.y - minY) / height) * (1.0 - padding * 2)
-
-            val visualRadius = 0.05
-
-            // Return a COPY with new coordinates
-            vp.copy(x = normX, y = normY, radius = visualRadius)
-        }
-    }
-
-
-    // ============================================================================================
-    // PHASE 3: AI ENRICHMENT TODO: Rebuild this so that the user can choose WHAT to label - auto-labeling is too expensive.
-    // ============================================================================================
-
-    private fun runAiLabeling(points: List<VectorPoint>, activeClusterIds: Set<Int>) {
-        thread(start = true) {
-            val total = activeClusterIds.size
-            var processed = 0
-
-            val currentThemes = AnalysisContext.state.clusterThemes.toMutableMap()
-
-            for (clusterId in activeClusterIds) {
-                // 1. Gather Text
-                val snippets = points.filter { it.clusterId == clusterId }.map { it.metaData }
-
-                // 2. Call AI
-                var label = ollamaEnricher.summarizeCluster(snippets)
-
-                // 3. Sanitize
-                label = sanitizeLabel(label)
-
-                // 4. Update
-                currentThemes[clusterId] = label
-                processed++
-
-                Platform.runLater {
-                    AnalysisContext.update(AnalysisContext.state.copy(clusterThemes = currentThemes))
-                    renderer.render(AnalysisContext.state)
-                    analyzingStatusLabel.text = "AI Labeling: $processed / $total"
-                }
-            }
-            Platform.runLater { analyzingStatusLabel.text = "Analysis Complete." }
-        }
-    }
-
-    private fun sanitizeLabel(raw: String): String {
-        var clean = raw.replace(Regex("[^a-zA-Z0-9 ]"), " ").trim()
-        val words = clean.split("\\s+".toRegex())
-        if (words.size > 3) {
-            clean = words.take(2).joinToString(" ")
-        }
-        return clean.split(" ").joinToString(" ") {
-            it.lowercase().replaceFirstChar { c -> c.uppercase() }
-        }
-    }
-
     // ============================================================================================
     // UI DETAILS PANEL
     // ============================================================================================
@@ -490,9 +415,6 @@ class ExplorerController {
             switchView(ViewMode.SEARCH, query)
     }
 
-    // ===============================================
-    // HIERARCHICAL NAVIGATION
-    // ===============================================
     @FXML
     fun onExplore() { // Rename to onFocusSelection() if possible
         val current = AnalysisContext.state

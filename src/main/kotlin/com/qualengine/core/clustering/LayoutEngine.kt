@@ -17,7 +17,6 @@ object LayoutEngine {
     private const val MOAT_SIZE = 300.0        // The empty space between Blob and Outliers
     private const val CONNECTION_SENSITIVITY = 0.9 // Higher = less connections | Lower = more connections
 
-    // What % of clusters count as the "Dense Core"?
     // 0.6 = The closest 60% of clusters are treated as the blob.
     private const val CORE_RATIO = 0.6
 
@@ -286,7 +285,6 @@ object LayoutEngine {
         }
     }
 
-    // (Helper methods calculateCentroids, calculateSimilarityMatrix, normalize remain the same)
     private fun calculateCentroids(
         points: List<VectorPoint>,
         ids: IntArray,
