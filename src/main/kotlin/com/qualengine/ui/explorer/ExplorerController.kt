@@ -256,9 +256,6 @@ class ExplorerController {
 
             // === COMMIT TO STATE ===
             Platform.runLater {
-                // Initialize labels as placeholders. User can trigger AI Labeling later.
-                val initialThemes = clusterLayout.positions.keys.associateWith { "Processing..." }
-
                 val initialCamera = calculateFitToScreenCamera(
                     clusterLayout.positions,
                     mapCanvas.width,

@@ -34,7 +34,7 @@ data class AppState(
 
     // === LABEL DATA ===
     val clusterLabels: Map<Int, String> = emptyMap(),
-    val coreLabel: String,
+    val coreLabel: String = "",
     val outlierLabels: Map<Int, String> = emptyMap(),
 
     // === NAVIGATION STATE ===

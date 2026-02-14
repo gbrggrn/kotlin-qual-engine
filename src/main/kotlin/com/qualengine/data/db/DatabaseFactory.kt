@@ -57,53 +57,8 @@ object DatabaseFactory {
                     embedding = vectorArray,
                     metaData = it[Paragraphs.content],
                     layer = 2,
-                    parentId = it[Paragraphs.docId]
-                )
-            }
-        }
-    }
-
-    fun getSentencesForParagraphs(paraIds: List<String>): List<VectorPoint> {
-        return transaction {
-            Sentences.selectAll().where { Sentences.paragraphId inList paraIds }.map {
-                val rawString = it[Paragraphs.vector] ?: ""
-                VectorPoint(
-                    id = it[Sentences.id],
-                    embedding = parseEmbedding(rawString),
-                    metaData = it[Sentences.content],
-                    layer = 1,
-                    parentId = it[Sentences.paragraphId]
-                )
-            }
-        }
-    }
-
-    fun getParagraphsForDocs(docIds: List<String>): List<VectorPoint> {
-        return transaction {
-            Paragraphs.selectAll().where { Paragraphs.docId inList docIds }.map {
-                val rawString = it[Paragraphs.vector] ?: ""
-                VectorPoint(
-                    id = it[Paragraphs.id],
-                    embedding = parseEmbedding(rawString),
-                    metaData = it[Paragraphs.content],
-                    layer = 2,
-                    parentId = it[Paragraphs.docId]
-                )
-            }
-        }
-    }
-
-    // --- Fetch all documents as points
-    fun getDocumentPoints(): List<VectorPoint> {
-        return transaction {
-            Documents.selectAll().map {
-                val rawString = it[Documents.vector] ?: ""
-                VectorPoint(
-                    id = it[Documents.id],
-                    embedding = parseEmbedding(rawString),
-                    metaData = it[Documents.origin],
-                    layer = 3, // Layer 3 is Document Level
-                    parentId = null
+                    parentId = it[Paragraphs.docId],
+                    enrichedMetaData = it[Paragraphs.enrichedContent]
                 )
             }
         }

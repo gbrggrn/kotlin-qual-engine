@@ -223,7 +223,7 @@ class ExplorerRenderer(
                 // Simple culling
                 if (screenPos.x < 0 || screenPos.x > width || screenPos.y < 0 || screenPos.y > height) continue
 
-                val label = state.clusterThemes[id] ?: "Group $id"
+                val label = state.clusterLabels[id] ?: "Group $id"
 
                 graphics.fill = Color.rgb(255, 255, 255, 0.9)
                 graphics.setEffect(javafx.scene.effect.DropShadow(2.0, Color.BLACK))
