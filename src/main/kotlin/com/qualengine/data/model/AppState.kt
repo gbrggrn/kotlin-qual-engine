@@ -5,45 +5,45 @@ import kotlin.math.abs
 import kotlin.math.min
 
 data class AppState(
-    // --- POINTS DATA ---
+    // === POINTS DATA ===
     val allPoints: List<VectorPoint> = emptyList(),
 
-    // --- VIEWPORT ---
+    // === VIEWPORT ===
     val width: Double = 0.0,
     val height: Double = 0.0,
 
-    // --- INTERACTION ---
+    // === INTERACTION ===
     val hoveredPoint: VectorPoint? = null,
-    val selectedPoints: Set<VectorPoint> = emptySet(), // Changed to Set (Immutable)
+    val selectedPoints: Set<VectorPoint> = emptySet(),
 
-    // --- MARQUEE SELECTION (Transient State) ---
+    // === MARQUEE SELECTION (Transient State) ===
     val isDragging: Boolean = false,
     val dragStartX: Double = 0.0,
     val dragStartY: Double = 0.0,
     val dragCurrentX: Double = 0.0,
     val dragCurrentY: Double = 0.0,
 
-    // --- CLUSTER SHAPES ---
+    // === CLUSTER SHAPES ===
     val clusterShapes: Map<Int, List<Point2D>> = emptyMap(),
 
-    // --- CLUSTERING DATA ---
+    // === CLUSTERING DATA ===
     val clusterCenters: Map<Int, VirtualPoint> = emptyMap(),
     val coreClusterIds: Set<Int> = emptySet(),
     val outlierClusterIds: List<Set<Int>> = emptyList(),
     val clusterConnections: Map<Int, List<Int>> = emptyMap(),
 
-    // --- LABEL DATA ---
+    // === LABEL DATA ===
     val clusterLabels: Map<Int, String> = emptyMap(),
     val coreLabel: String,
     val outlierLabels: Map<Int, String> = emptyMap(),
 
-    // --- NAVIGATION STATE ---
+    // === NAVIGATION STATE ===
     val cameraHistory: List<Camera> = emptyList(),
 
-    // --- CAMERA ---
+    // === CAMERA ===
     val camera: Camera = Camera()
 ) {
-    // --- HELPER LOGIC ---
+    // === HELPERS ===
     // Computed property: Calculates bounds on the fly based on the current state variables
     val selectionBounds: Bounds?
         get() {
