@@ -59,11 +59,12 @@ class ExplorerController {
     fun initialize() {
         DependencyRegistry.explorerController = this
 
+        // Lateinit dependencies
         pipeline = DependencyRegistry.createInputPipeline(mapCanvas)
         coordinateMapper = DependencyRegistry.createCoordinateMapper(mapCanvas)
         renderer = DependencyRegistry.createRenderer(mapCanvas, coordinateMapper)
 
-        // --- Bind layout resizing
+        // Bind layout resizing
         mapCanvas.widthProperty().bind(mapContainer.widthProperty())
         mapCanvas.heightProperty().bind(mapContainer.heightProperty())
 
@@ -86,7 +87,7 @@ class ExplorerController {
         mapCanvas.widthProperty().addListener(resizeListener)
         mapCanvas.heightProperty().addListener(resizeListener)
 
-        // --- Bind MouseEvents to InputPipeline
+        // Bind MouseEvents to InputPipeline
         mapCanvas.setOnMouseMoved { e -> pipeline.handleMouseMove(e); requestRender() }
         mapCanvas.setOnMousePressed { e -> pipeline.handleMousePressed(e); requestRender() }
         mapCanvas.setOnMouseDragged { e -> pipeline.handleMouseDragged(e); requestRender() }
@@ -101,9 +102,13 @@ class ExplorerController {
             updateSidePanel()
         }
 
-        // --- Initial Data Load
+        // Initial Data Load
         loadDataFromDb()
     }
+
+    // ============================================================================================
+    // RENDERING & CAMERA
+    // ============================================================================================
 
     fun requestRender() {
         renderer.render(AnalysisContext.state)
@@ -172,7 +177,7 @@ class ExplorerController {
     }
 
     // ============================================================================================
-    // PHASE 1: INGESTION
+    // DATABASE TOUCH
     // ============================================================================================
 
     fun loadDataFromDb() {
@@ -181,7 +186,6 @@ class ExplorerController {
         analyzingStatusLabel.text = "Loading thematic galaxy..."
 
         thread(start = true) {
-            // 1. Fetch clean objects from Factory
             val points = databaseFactory.getParagraphPoints()
 
             Platform.runLater {
@@ -195,7 +199,7 @@ class ExplorerController {
     }
 
     // ============================================================================================
-    // PHASE 2: THE MATH PIPELINE (Refresh Map)
+    // ANALYSIS PIPELINE
     // ============================================================================================
 
     @FXML
@@ -364,7 +368,7 @@ class ExplorerController {
     }
 
     // ============================================================================================
-    // UI DETAILS PANEL
+    // SIDE DETAILS PANEL
     // ============================================================================================
 
     private fun updateSidePanel() {
@@ -436,22 +440,21 @@ class ExplorerController {
     }
 
     @FXML
-    fun onExplore() { // Rename to onFocusSelection() if possible
+    fun onExplore() { // TODO: Rename to onFocusSelection() or something?
         val current = AnalysisContext.state
         if (current.selectedPoints.isEmpty()) return
 
-        // 1. Find the Bounding Box of the SELECTION
-        // (Note: We use the raw projected coordinates)
+        // Find the Bounding Box of the SELECTION
         val minX = current.selectedPoints.minOf { it.projectedX }
         val maxX = current.selectedPoints.maxOf { it.projectedX }
         val minY = current.selectedPoints.minOf { it.projectedY }
         val maxY = current.selectedPoints.maxOf { it.projectedY }
 
-        // 2. Calculate the Center
+        // Calculate the Center
         val centerX = (minX + maxX) / 2.0
         val centerY = (minY + maxY) / 2.0
 
-        // 3. Calculate Zoom to Fit
+        // Calculate Zoom to Fit
         val width = maxX - minX
         val height = maxY - minY
 
@@ -471,7 +474,7 @@ class ExplorerController {
         // Clamp it so we don't zoom in to the atomic level
         val targetZoom = minOf(zoomX, zoomY).coerceAtMost(5.0)
 
-        // 4. Update Camera ONLY
+        // Update Camera ONLY
         val newCamera = current.camera.copy(
             x = centerX,
             y = centerY,
@@ -495,7 +498,6 @@ class ExplorerController {
     fun onBack() { // Rename to onResetView()
         val current = AnalysisContext.state
 
-        // Option A: Simple "Fit to Galaxy" (Recommended)
         // Recalculate camera for ALL points
         val minX = current.allPoints.minOf { it.projectedX }
         val maxX = current.allPoints.maxOf { it.projectedX }
