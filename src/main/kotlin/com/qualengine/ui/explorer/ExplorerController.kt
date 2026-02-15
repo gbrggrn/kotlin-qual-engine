@@ -436,7 +436,7 @@ class ExplorerController {
             switchView(ViewMode.SEARCH, query)
     }
 
-    @FXML
+    @FXML 
     fun onExplore() { // TODO: Rename to onFocusSelection() or something?
         val current = AnalysisContext.state
         if (current.selectedPoints.isEmpty()) return
