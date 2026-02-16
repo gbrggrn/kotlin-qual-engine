@@ -3,7 +3,6 @@ package com.qualengine.core.clustering
 import com.qualengine.app.DependencyRegistry
 import com.qualengine.data.model.VectorPoint
 import com.qualengine.data.model.VirtualPoint
-import java.util.Random
 import kotlin.math.*
 
 object LayoutEngine {
@@ -11,21 +10,28 @@ object LayoutEngine {
     private val vectorMath = DependencyRegistry.vectorMath
 
     // === TUNING ===
-    private const val PHYSICS_ITERATIONS = 300
-    private const val CLUSTER_RADIUS = 50.0
-    private const val CORE_PADDING = 10.0      // Gap inside the blob
-    private const val MOAT_SIZE = 300.0        // The empty space between Blob and Outliers
-    private const val CONNECTION_SENSITIVITY = 0.9 // Higher = less connections | Lower = more connections
+    private const val MIN_BLOB_SIZE = 1
+    private const val MAX_BLOB_SIZE = 6      // Slightly larger groups
+    private const val BLOB_MERGE_THRESHOLD = 0.35
 
-    // 0.6 = The closest 60% of clusters are treated as the blob.
-    private const val CORE_RATIO = 0.6
+    private const val MAP_SCALE = 1800.0     // Spread the world out more
+    private const val BLOB_PADDING = 100.0   // Massive gap between blobs
+    private const val CLUSTER_PADDING = 15.0 // Gap between clusters inside a blob
 
-    private class PhysicsNode(
+    // DATA HOLDERS
+    private data class Blob(
         val id: Int,
-        var x: Double,
-        var y: Double,
-        var vx: Double = 0.0,
-        var vy: Double = 0.0,
+        val clusterIds: MutableSet<Int>,
+        var x: Double = 0.0,
+        var y: Double = 0.0,
+        var radius: Double = 0.0 // Will be calculated dynamically
+    )
+
+    // Internal helper for the spiral algorithm
+    private data class PlacedItem<T>(
+        val item: T,
+        val x: Double,
+        val y: Double,
         val radius: Double
     )
 
@@ -41,257 +47,266 @@ object LayoutEngine {
         clusterIds: IntArray
     ): LayoutResult {
 
-        // 1. INITIALIZE (Random Scatter)
-        // We start random so the physics can find the TRUE relative positions.
-        val nodes = initializeNodesRandomly(clusterIds)
-        if (nodes.isEmpty())
-            return LayoutResult()
+        // 1. DATA PREP
+        val counts = clusterIds.filter { it != -1 }.groupBy { it }.mapValues { it.value.size }
+        val uniqueIds = counts.keys.sorted()
+        if (uniqueIds.isEmpty()) return LayoutResult()
 
-        // 2. INTELLIGENCE (Centroids & Similarity)
-        val centroids = calculateCentroids(points, clusterIds, nodes.keys)
-        val similarityMatrix = calculateSimilarityMatrix(nodes.keys, centroids)
+        val centroids = calculateCentroids(points, clusterIds, uniqueIds.toSet())
+        val similarityMatrix = calculateSimilarityMatrix(uniqueIds.toSet(), centroids)
 
-        // Calculate and save connections between clusters (to be presented on hover)
-        val clusterConnections = mutableMapOf<Int, List<Int>>()
-        for ((idA, row) in similarityMatrix) {
-            val friends = mutableListOf<Int>()
-            for ((idB, sim) in row) {
-                if (sim > CONNECTION_SENSITIVITY) {
-                    friends.add(idB)
-                }
+        // 2. BLOBIFY
+        val blobs = formSmallBlobs(uniqueIds, similarityMatrix)
+        val blobCentroids = calculateBlobCentroids(blobs, centroids)
+
+        // 3. CALCULATE SIZES
+        // We must know how big every cluster and blob is BEFORE we place them.
+        val clusterRadii = uniqueIds.associateWith { id ->
+            val count = counts[id] ?: 10
+            sqrt(count.toDouble()) * 8.0 + 20.0
+        }
+
+        // Blob Radius = Size needed to hold its children + padding
+        blobs.forEach { blob ->
+            val totalArea = blob.clusterIds.sumOf { id ->
+                val r = clusterRadii[id]!!
+                PI * r * r
             }
-            if (friends.isNotEmpty())
-                clusterConnections[idA] = friends
+            // Add 40% buffer for packing inefficiency
+            blob.radius = sqrt((totalArea * 1.4) / PI)
         }
 
-        // 3. PHASE 1: NATURAL PHYSICS
-        // Let the clusters find their natural semantic positions (Blob Right / Outliers Left)
-        val nodeList = nodes.values.toList()
-        repeat(PHYSICS_ITERATIONS) {
-            applyForces(nodeList, similarityMatrix)
-            updatePositions(nodeList)
-        }
+        println("LayoutEngine: Placing ${blobs.size} blobs...")
 
-        // 4. PHASE 2: CORE INFLATION (The "Magnifying Glass")
-        // Now that we know WHERE they are, we fix the CROWDING.
-        val (coreIds, outlierNodes) = inflateCoreAndPushOutliers(nodeList)
-
-        val outlierIds = identifyIslands(outlierNodes, gapThreshold = 300.0)
-
-        // 5. PHASE 3: FINAL RESOLVE
-        // Ensure nothing is overlapping after the shift
-        resolveCollisions(nodeList)
-
-        val positionsMap = nodes.mapValues { (id, node) ->
-            VirtualPoint(id, node.x, node.y, node.radius, "Processing")
-        }
-
-        return LayoutResult(
-            positions = positionsMap,
-            coreIds = coreIds,
-            outlierIds = outlierIds,
-            clusterConnections = clusterConnections
+        // 4. GLOBAL LAYOUT (Blobs)
+        // Place blobs on the map. If they overlap, spiral them out.
+        projectAndPlaceSpiral(
+            items = blobs,
+            itemCentroids = blobCentroids,
+            scale = MAP_SCALE,
+            padding = BLOB_PADDING,
+            getRadius = { it.radius },
+            getId = { it.id },
+            updatePosition = { blob, x, y -> blob.x = x; blob.y = y }
         )
-    }
 
-    // ========================================================
-    // INFLATION
-    // ========================================================
-    private fun inflateCoreAndPushOutliers(nodes: List<PhysicsNode>): Pair<Set<Int>, List<PhysicsNode>> {
-        // 1. Find the Universe Center
-        val centerX = nodes.map { it.x }.average()
-        val centerY = nodes.map { it.y }.average()
+        // 5. LOCAL LAYOUT (Clusters)
+        val finalPositions = mutableMapOf<Int, VirtualPoint>()
 
-        // 2. Sort by distance from center to identify Core vs Outliers
-        val sortedByDist = nodes.sortedBy {
-            val dx = it.x - centerX
-            val dy = it.y - centerY
-            dx * dx + dy * dy
-        }
+        for (blob in blobs) {
+            // Create wrappers for the clusters inside this blob
+            val clusterItems = blob.clusterIds.toList()
 
-        val splitIndex = (nodes.size * CORE_RATIO).toInt().coerceAtLeast(1)
-        val coreNodes = sortedByDist.take(splitIndex)
-        val outlierNodes = sortedByDist.drop(splitIndex)
-
-        // 3. Measure the Core's Natural Size
-        // How far out does the blob currently extend?
-        val currentCoreRadius = coreNodes.maxOfOrNull {
-            hypot(it.x - centerX, it.y - centerY)
-        } ?: 100.0
-
-        // 4. Calculate Required Size
-        // If we packed them perfectly, how much space do we actually need?
-        // Area = Count * (Radius + Padding)^2
-        val requiredArea = coreNodes.size * (CLUSTER_RADIUS * 2 + CORE_PADDING).pow(2)
-        val requiredRadius = sqrt(requiredArea) * 1.2 // Add 20% breathing room
-
-        // 5. Calculate Scale Factor
-        // "We need to be 3x bigger"
-        val scaleFactor = (requiredRadius / currentCoreRadius).coerceAtLeast(1.0)
-
-        // 6. APPLY TRANSFORMATION
-
-        // A. EXPAND THE CORE
-        // We push core nodes out to give them space, but keep relative angles.
-        for (node in coreNodes) {
-            val dx = node.x - centerX
-            val dy = node.y - centerY
-
-            // Linear expansion
-            node.x = centerX + (dx * scaleFactor)
-            node.y = centerY + (dy * scaleFactor)
-        }
-
-        // B. PUSH THE OUTLIERS
-        // We push them so they stay OUTSIDE the new core radius + MOAT
-        val newCoreEdge = requiredRadius
-
-        for (node in outlierNodes) {
-            val dx = node.x - centerX
-            val dy = node.y - centerY
-            val dist = hypot(dx, dy)
-            val angle = atan2(dy, dx)
-
-            // The outlier's new distance is:
-            // The New Core Edge + The Moat + Its Original "Extra" Distance
-            val originalGap = (dist - currentCoreRadius).coerceAtLeast(0.0)
-            val newDist = newCoreEdge + MOAT_SIZE + (originalGap * 1.5) // 1.5x to exaggerate distance slightly
-
-            node.x = centerX + cos(angle) * newDist
-            node.y = centerY + sin(angle) * newDist
-        }
-
-        val coreIds = coreNodes.map { it.id }.toSet()
-        return Pair(coreIds, outlierNodes)
-    }
-
-    // Group nodes into islands based on spatial proximity
-    private fun identifyIslands(nodes: List<PhysicsNode>, gapThreshold: Double): List<Set<Int>> {
-        val visited = mutableSetOf<Int>()
-        val islands = mutableListOf<Set<Int>>()
-
-        for (node in nodes) {
-            if (node.id in visited) continue
-
-            // Start a new Island
-            val currentIsland = mutableSetOf<Int>()
-            val queue = ArrayDeque<PhysicsNode>()
-            queue.add(node)
-            visited.add(node.id)
-
-            while (!queue.isEmpty()) {
-                val current = queue.removeFirst()
-                currentIsland.add(current.id)
-
-                // Find neighbors
-                for (other in nodes) {
-                    if (other.id !in visited) {
-                        val dist = hypot(current.x - other.x, current.y - other.y)
-                        // If visually close enough to be considered a "Group"
-                        if (dist < gapThreshold) {
-                            visited.add(other.id)
-                            queue.add(other)
-                        }
-                    }
+            // Place clusters inside the blob (Relative to 0,0)
+            projectAndPlaceSpiral(
+                items = clusterItems,
+                itemCentroids = centroids, // Use raw cluster centroids
+                scale = blob.radius * 0.5, // Constrain projection to blob interior
+                padding = CLUSTER_PADDING,
+                getRadius = { clusterRadii[it]!! },
+                getId = { it },
+                updatePosition = { clusterId, relX, relY ->
+                    finalPositions[clusterId] = VirtualPoint(
+                        clusterId,
+                        blob.x + relX, // Absolute X
+                        blob.y + relY, // Absolute Y
+                        clusterRadii[clusterId]!!,
+                        "Processing"
+                    )
                 }
-            }
-            islands.add(currentIsland)
-        }
-        return islands
-    }
-
-
-    // ========================================================
-    // STANDARD PHYSICS
-    // ========================================================
-    private fun initializeNodesRandomly(ids: IntArray): Map<Int, PhysicsNode> {
-        val validIds = ids.filter { it != -1 }.distinct()
-        val rng = Random(123) // Deterministic Seed for "Left is Left" consistency
-        return validIds.associateWith { id ->
-            PhysicsNode(
-                id,
-                (rng.nextDouble() - 0.5) * 100.0,
-                (rng.nextDouble() - 0.5) * 100.0,
-                radius = CLUSTER_RADIUS
             )
         }
+
+        // 6. FINALIZE
+        val sortedBlobs = blobs.sortedByDescending { it.clusterIds.sumOf { cid -> counts[cid] ?: 0 } }
+        val coreIds = sortedBlobs.firstOrNull()?.clusterIds ?: emptySet()
+        val outlierIds = sortedBlobs.drop(1).map { it.clusterIds }
+        val connections = calculateConnections(similarityMatrix, 0.75)
+
+        return LayoutResult(finalPositions, coreIds, outlierIds, connections)
     }
 
-    private fun applyForces(nodes: List<PhysicsNode>, similarityMatrix: Map<Int, Map<Int, Double>>) {
-        for (i in nodes.indices) {
-            val n1 = nodes[i]
-            // Gravity
-            n1.vx -= n1.x * 0.01
-            n1.vy -= n1.y * 0.01
+    // ========================================================
+    // LOGIC: SPIRAL PLACEMENT (The Overlap Killer)
+    // ========================================================
 
-            for (j in i + 1 until nodes.size) {
-                val n2 = nodes[j]
-                val dx = n1.x - n2.x
-                val dy = n1.y - n2.y
-                val distSq = dx*dx + dy*dy
-                val dist = sqrt(distSq).coerceAtLeast(1.0)
-                val sim = similarityMatrix[n1.id]!![n2.id] ?: 0.0
+    /**
+     * 1. Projects items to their "Ideal" semantic position.
+     * 2. If that spot is taken, spirals outward until a free spot is found.
+     */
+    private fun <T> projectAndPlaceSpiral(
+        items: List<T>,
+        itemCentroids: Map<Int, DoubleArray>,
+        scale: Double,
+        padding: Double,
+        getRadius: (T) -> Double,
+        getId: (T) -> Int,
+        updatePosition: (T, Double, Double) -> Unit
+    ) {
+        if (items.isEmpty()) return
 
-                // Repulsion
-                val repulsion = (800.0 * (1.0 - sim)) / dist
-                n1.vx += (dx/dist) * repulsion
-                n1.vy += (dy/dist) * repulsion
-                n2.vx -= (dx/dist) * repulsion
-                n2.vy -= (dy/dist) * repulsion
+        // A. Calculate Ideal Positions (The Semantic Truth)
+        // ------------------------------------------------
+        val idealPositions = mutableMapOf<T, Pair<Double, Double>>()
 
-                // Attraction
-                if (sim > 0.6) {
-                    val attraction = (dist * 0.05) * sim
-                    n1.vx -= (dx/dist) * attraction
-                    n1.vy -= (dy/dist) * attraction
-                    n2.vx += (dx/dist) * attraction
-                    n2.vy += (dy/dist) * attraction
+        // Find Global Center
+        val allVectors = items.map { itemCentroids[getId(it)]!! }
+        val globalCenter = vectorMath.calculateCentroid(allVectors)
+
+        // Find Pivots (X and Y axes)
+        val pivotX = items.maxByOrNull {
+            val vec = itemCentroids[getId(it)]!!
+            vectorMath.calculateCosineDistance(vec, vectorMath.getMagnitude(vec), globalCenter, vectorMath.getMagnitude(globalCenter))
+        } ?: items[0]
+
+        val vecX = itemCentroids[getId(pivotX)]!!
+
+        val pivotY = items.maxByOrNull {
+            val vec = itemCentroids[getId(it)]!!
+            vectorMath.calculateCosineDistance(vec, vectorMath.getMagnitude(vec), vecX, vectorMath.getMagnitude(vecX))
+        } ?: items[0]
+
+        val vecY = itemCentroids[getId(pivotY)]!!
+
+        for (item in items) {
+            val vec = itemCentroids[getId(item)]!!
+            // Project onto Semantic Axes
+            val simX = vectorMath.dotProduct(vec, vecX)
+            val simY = vectorMath.dotProduct(vec, vecY)
+
+            // Map [-1, 1] range to Scale
+            val rawX = (simX - 0.5) * 2.5 * scale
+            val rawY = (simY - 0.5) * 2.5 * scale
+            idealPositions[item] = rawX to rawY
+        }
+
+        // B. Place Items (The Physical Reality)
+        // -------------------------------------
+        val placed = mutableListOf<PlacedItem<T>>()
+
+        // Sort by distance to center. We want to place the "Core" items first
+        // so they get the best spots. Outliers can float to the edges.
+        val sortedItems = items.sortedBy {
+            val (ix, iy) = idealPositions[it]!!
+            ix*ix + iy*iy
+        }
+
+        for (item in sortedItems) {
+            val (idealX, idealY) = idealPositions[item]!!
+            val myRadius = getRadius(item)
+
+            var candidateX = idealX
+            var candidateY = idealY
+
+            // SPIRAL SEARCH
+            // If we collide, we start walking in a spiral until we find free space.
+            var angle = 0.0
+            var radius = 0.0
+            var step = 10.0 // How fast we spiral out
+
+            // Safety valve: Don't spiral forever
+            var attempts = 0
+            while (attempts < 5000) {
+
+                // Check Collision against ALL previously placed items
+                var collision = false
+                for (p in placed) {
+                    val dx = candidateX - p.x
+                    val dy = candidateY - p.y
+                    val distSq = dx*dx + dy*dy
+                    val minDist = myRadius + p.radius + padding
+
+                    if (distSq < minDist * minDist) {
+                        collision = true
+                        break
+                    }
                 }
+
+                if (!collision) {
+                    // Success!
+                    break
+                }
+
+                // Collision! Move along the spiral
+                angle += 0.5 // Radians
+                radius += 5.0 // Push out
+
+                candidateX = idealX + cos(angle) * radius
+                candidateY = idealY + sin(angle) * radius
+                attempts++
             }
+
+            // Commit placement
+            placed.add(PlacedItem(item, candidateX, candidateY, myRadius))
+            updatePosition(item, candidateX, candidateY)
         }
     }
 
-    private fun updatePositions(nodes: List<PhysicsNode>) {
-        for (n in nodes) {
-            n.x += n.vx
-            n.y += n.vy
-            n.vx *= 0.8 // Damping
-            n.vy *= 0.8
-        }
-    }
+    // ========================================================
+    // LOGIC: BLOB FORMATION (Unchanged)
+    // ========================================================
 
-    private fun resolveCollisions(nodes: List<PhysicsNode>) {
-        repeat(50) {
-            for (i in nodes.indices) {
-                val n1 = nodes[i]
-                for (j in i + 1 until nodes.size) {
-                    val n2 = nodes[j]
-                    val dx = n1.x - n2.x
-                    val dy = n1.y - n2.y
-                    val dist = hypot(dx, dy)
-                    val minDist = n1.radius + n2.radius + CORE_PADDING
+    private fun formSmallBlobs(
+        clusterIds: List<Int>,
+        matrix: Map<Int, Map<Int, Double>>
+    ): List<Blob> {
+        var nextBlobId = 0
+        val blobs = clusterIds.map { Blob(nextBlobId++, mutableSetOf(it)) }.toMutableList()
 
-                    if (dist < minDist && dist > 0.001) {
-                        val overlap = minDist - dist
-                        val pushX = (dx/dist) * overlap * 0.5
-                        val pushY = (dy/dist) * overlap * 0.5
-                        n1.x += pushX
-                        n1.y += pushY
-                        n2.x -= pushX
-                        n2.y -= pushY
+        var changed = true
+        while (changed) {
+            changed = false
+            var bestMerge: Pair<Blob, Blob>? = null
+            var maxSim = -1.0
+
+            for (i in blobs.indices) {
+                for (j in i + 1 until blobs.size) {
+                    val b1 = blobs[i]
+                    val b2 = blobs[j]
+
+                    // CONSTRAINT: Max Blob Size
+                    if (b1.clusterIds.size + b2.clusterIds.size > MAX_BLOB_SIZE) continue
+
+                    val sim = calculateBlobSimilarity(b1, b2, matrix)
+                    if (sim > maxSim && sim > BLOB_MERGE_THRESHOLD) {
+                        maxSim = sim
+                        bestMerge = b1 to b2
                     }
                 }
             }
+
+            if (bestMerge != null) {
+                val (parent, child) = bestMerge
+                parent.clusterIds.addAll(child.clusterIds)
+                blobs.remove(child)
+                changed = true
+            }
+        }
+        return blobs
+    }
+
+    // --- HELPERS ---
+
+    private fun calculateBlobCentroids(blobs: List<Blob>, clusterCentroids: Map<Int, DoubleArray>): Map<Int, DoubleArray> {
+        return blobs.associate { blob ->
+            val vectors = blob.clusterIds.map { clusterCentroids[it]!! }
+            blob.id to normalize(vectorMath.calculateCentroid(vectors))
         }
     }
 
-    private fun calculateCentroids(
-        points: List<VectorPoint>,
-        ids: IntArray,
-        nodeIds: Set<Int>
-    ): Map<Int, DoubleArray> {
-        val pointsByCluster = points.indices.groupBy { ids[it] }
+    private fun calculateBlobSimilarity(b1: Blob, b2: Blob, matrix: Map<Int, Map<Int, Double>>): Double {
+        var sum = 0.0; var count = 0
+        for (id1 in b1.clusterIds) {
+            for (id2 in b2.clusterIds) {
+                sum += matrix[id1]!![id2] ?: 0.0
+                count++
+            }
+        }
+        return if (count == 0) 0.0 else sum / count
+    }
 
+    private fun calculateCentroids(points: List<VectorPoint>, ids: IntArray, nodeIds: Set<Int>): Map<Int, DoubleArray> {
+        val pointsByCluster = points.indices.groupBy { ids[it] }
         return nodeIds.associateWith { id ->
             val indices = pointsByCluster[id] ?: emptyList()
             val vectors = indices.map { points[it].embedding }
@@ -300,35 +315,33 @@ object LayoutEngine {
         }
     }
 
-    private fun calculateSimilarityMatrix(
-        nodeIds: Set<Int>,
-        centroids: Map<Int, DoubleArray>
-    ): Map<Int, Map<Int, Double>> {
+    private fun calculateSimilarityMatrix(nodeIds: Set<Int>, centroids: Map<Int, DoubleArray>): Map<Int, Map<Int, Double>> {
         val list = nodeIds.toList()
         val matrix = mutableMapOf<Int, MutableMap<Int, Double>>()
-
-        for (id in list) matrix[id] = mutableMapOf()
-
+        list.forEach { matrix[it] = mutableMapOf() }
         for (i in list.indices) {
             for (j in i + 1 until list.size) {
-                val idA = list[i]
-                val idB = list[j]
-
-                val sim = vectorMath.dotProduct(centroids[idA]!!, centroids[idB]!!)
-                val cleanSim = sim.coerceAtLeast(0.0)
-
-                matrix[idA]!![idB] = cleanSim
-                matrix[idB]!![idA] = cleanSim
+                val idA = list[i]; val idB = list[j]
+                val sim = vectorMath.dotProduct(centroids[idA]!!, centroids[idB]!!).coerceAtLeast(0.0)
+                matrix[idA]!![idB] = sim; matrix[idB]!![idA] = sim
             }
         }
         return matrix
     }
 
+    private fun calculateConnections(matrix: Map<Int, Map<Int, Double>>, threshold: Double): Map<Int, List<Int>> {
+        val connections = mutableMapOf<Int, List<Int>>()
+        for ((idA, row) in matrix) {
+            val friends = row.filter { it.value > threshold }.keys.toList()
+            if (friends.isNotEmpty()) connections[idA] = friends
+        }
+        return connections
+    }
+
     private fun normalize(v: DoubleArray): DoubleArray {
         var sum = 0.0
         for (d in v) sum += d * d
-        val mag = kotlin.math.sqrt(sum)
-        if (mag == 0.0) return v
-        return DoubleArray(v.size) { i -> v[i] / mag }
+        val mag = sqrt(sum)
+        return if (mag == 0.0) v else DoubleArray(v.size) { i -> v[i] / mag }
     }
 }

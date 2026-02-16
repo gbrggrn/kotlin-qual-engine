@@ -18,6 +18,7 @@ import com.qualengine.data.pipeline.InputPipeline
 import javafx.geometry.Point2D
 import javafx.scene.control.Button
 import javafx.scene.control.TextField
+import kotlin.collections.toIntArray
 import kotlin.concurrent.thread
 import kotlin.math.cos
 import kotlin.math.sin
@@ -436,7 +437,7 @@ class ExplorerController {
             switchView(ViewMode.SEARCH, query)
     }
 
-    @FXML 
+    @FXML
     fun onExplore() { // TODO: Rename to onFocusSelection() or something?
         val current = AnalysisContext.state
         if (current.selectedPoints.isEmpty()) return

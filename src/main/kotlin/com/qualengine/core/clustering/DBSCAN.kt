@@ -44,11 +44,11 @@ class DBSCAN(
         )
     }
 
-    // --- Private Helpers (Copied from ClusterUtils, types fixed to DoubleArray) ---
+    // --- Helpers ---
 
     private fun expandCluster(
-        vectors: List<DoubleArray>, // <--- CHANGED from List<List<Double>>
-        magnitudes: DoubleArray,    // <--- CHANGED from List<Double>
+        vectors: List<DoubleArray>,
+        magnitudes: DoubleArray,
         labels: IntArray,
         pIndex: Int,
         neighbors: MutableList<Int>,
