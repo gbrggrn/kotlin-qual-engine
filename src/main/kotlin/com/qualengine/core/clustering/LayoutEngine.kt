@@ -10,12 +10,12 @@ object LayoutEngine {
     private val vectorMath = DependencyRegistry.vectorMath
 
     // === TUNING ===
-    private const val MIN_BLOB_SIZE = 1
     private const val MAX_BLOB_SIZE = 6      // Slightly larger groups
-    private const val BLOB_MERGE_THRESHOLD = 0.35
+    private const val BLOB_MERGE_THRESHOLD = 0.35 // Lower = blobs merge easier
+    private const val CONNECTION_THRESHOLD = 0.85 // Lower = connections form easier
 
-    private const val MAP_SCALE = 1800.0     // Spread the world out more
-    private const val BLOB_PADDING = 100.0   // Massive gap between blobs
+    private const val MAP_SCALE = 1800.0     // Set the map scale
+    private const val BLOB_PADDING = 100.0   // Set the gap between blobs
     private const val CLUSTER_PADDING = 15.0 // Gap between clusters inside a blob
 
     // DATA HOLDERS
@@ -47,7 +47,7 @@ object LayoutEngine {
         clusterIds: IntArray
     ): LayoutResult {
 
-        // 1. DATA PREP
+        // === DATA PREP
         val counts = clusterIds.filter { it != -1 }.groupBy { it }.mapValues { it.value.size }
         val uniqueIds = counts.keys.sorted()
         if (uniqueIds.isEmpty()) return LayoutResult()
@@ -55,11 +55,11 @@ object LayoutEngine {
         val centroids = calculateCentroids(points, clusterIds, uniqueIds.toSet())
         val similarityMatrix = calculateSimilarityMatrix(uniqueIds.toSet(), centroids)
 
-        // 2. BLOBIFY
+        // === BLOBIFY
         val blobs = formSmallBlobs(uniqueIds, similarityMatrix)
         val blobCentroids = calculateBlobCentroids(blobs, centroids)
 
-        // 3. CALCULATE SIZES
+        // === CALCULATE SIZES
         // We must know how big every cluster and blob is BEFORE we place them.
         val clusterRadii = uniqueIds.associateWith { id ->
             val count = counts[id] ?: 10
@@ -78,7 +78,7 @@ object LayoutEngine {
 
         println("LayoutEngine: Placing ${blobs.size} blobs...")
 
-        // 4. GLOBAL LAYOUT (Blobs)
+        // === GLOBAL LAYOUT (Blobs)
         // Place blobs on the map. If they overlap, spiral them out.
         projectAndPlaceSpiral(
             items = blobs,
@@ -90,7 +90,7 @@ object LayoutEngine {
             updatePosition = { blob, x, y -> blob.x = x; blob.y = y }
         )
 
-        // 5. LOCAL LAYOUT (Clusters)
+        // === LOCAL LAYOUT (Clusters)
         val finalPositions = mutableMapOf<Int, VirtualPoint>()
 
         for (blob in blobs) {
@@ -117,17 +117,17 @@ object LayoutEngine {
             )
         }
 
-        // 6. FINALIZE
+        // === FINALIZE
         val sortedBlobs = blobs.sortedByDescending { it.clusterIds.sumOf { cid -> counts[cid] ?: 0 } }
         val coreIds = sortedBlobs.firstOrNull()?.clusterIds ?: emptySet()
         val outlierIds = sortedBlobs.drop(1).map { it.clusterIds }
-        val connections = calculateConnections(similarityMatrix, 0.75)
+        val connections = calculateConnections(similarityMatrix, CONNECTION_THRESHOLD)
 
         return LayoutResult(finalPositions, coreIds, outlierIds, connections)
     }
 
     // ========================================================
-    // LOGIC: SPIRAL PLACEMENT (The Overlap Killer)
+    // LOGIC: SPIRAL PLACEMENT
     // ========================================================
 
     /**
@@ -145,8 +145,7 @@ object LayoutEngine {
     ) {
         if (items.isEmpty()) return
 
-        // A. Calculate Ideal Positions (The Semantic Truth)
-        // ------------------------------------------------
+        // === Calculate Ideal Positions (The Semantic Truth)
         val idealPositions = mutableMapOf<T, Pair<Double, Double>>()
 
         // Find Global Center
@@ -180,8 +179,7 @@ object LayoutEngine {
             idealPositions[item] = rawX to rawY
         }
 
-        // B. Place Items (The Physical Reality)
-        // -------------------------------------
+        // === Place Items (The Physical Reality)
         val placed = mutableListOf<PlacedItem<T>>()
 
         // Sort by distance to center. We want to place the "Core" items first
@@ -243,7 +241,7 @@ object LayoutEngine {
     }
 
     // ========================================================
-    // LOGIC: BLOB FORMATION (Unchanged)
+    // LOGIC: BLOB FORMATION
     // ========================================================
 
     private fun formSmallBlobs(
@@ -285,7 +283,9 @@ object LayoutEngine {
         return blobs
     }
 
-    // --- HELPERS ---
+    // ========================================================
+    // HELPERS
+    // ========================================================
 
     private fun calculateBlobCentroids(blobs: List<Blob>, clusterCentroids: Map<Int, DoubleArray>): Map<Int, DoubleArray> {
         return blobs.associate { blob ->
