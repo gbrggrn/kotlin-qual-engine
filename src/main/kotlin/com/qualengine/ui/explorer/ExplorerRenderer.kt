@@ -57,8 +57,8 @@ class ExplorerRenderer(
         val showHulls = true
         val showPoints = zoom > 0.4
         val showDetails = zoom > 1.5
-        val isGalaxyView = zoom < 0.8
-        val fadeClusterLabels = zoom > 2.0 // Hide big theme labels when deep in the weeds
+        val isGalaxyView = zoom < 2.0
+        val fadeClusterLabels = zoom !in 0.4..2.0 // Hide big theme labels when deep in the weeds
 
         // ==================================================
         // THE TERRITORIES (Hulls)
@@ -67,13 +67,13 @@ class ExplorerRenderer(
             // === GALAXY VIEW ===
 
             // 1. Draw The "Blob" (Super-Hull)
-            drawSuperHull(graphics, state, state.coreClusterIds, Color.rgb(100, 150, 255, 0.2))
+            for (id in state.blobIds) {
+                drawSuperHull(graphics, state, id, Color.rgb(100, 150, 255, 0.2))
+            }
 
             // 2. Draw The Outliers (Normal Hulls, but maybe simpler?)
             // For now, let's just draw their normal hulls to show they are distinct
-            for (set in state.outlierClusterIds) {
-                drawSuperHull(graphics, state, set, Color.rgb(100, 150, 255, 0.2))
-            }
+            //drawSuperHull(graphics, state, state.outlierClusterIds, Color.rgb(100, 150, 255, 0.2))
         }
 
         if (showHulls) {
@@ -252,37 +252,50 @@ class ExplorerRenderer(
         }
     }
 
-    private fun drawSuperHull(g: javafx.scene.canvas.GraphicsContext, state: AppState, clusterIds: Set<Int>, color: Color) {
-        if (clusterIds.isEmpty()) return
+    private fun drawSuperHull(g: javafx.scene.canvas.GraphicsContext, state: AppState, blobId: Int, color: Color) {
+        // 1. IDENTIFY TARGET CLUSTERS
+        // Look up which clusters belong to this specific Blob ID
+        val targetClusterIds = state.blobMap[blobId]
+        if (targetClusterIds.isNullOrEmpty()) return
 
-        // 1. Collect ALL points from ALL core clusters
-        val allCorePoints = state.allPoints.filter { it.clusterId in clusterIds }
-        if (allCorePoints.isEmpty()) return
+        // 2. COLLECT POINTS
+        // Filter the world points to finding only those belonging to the target clusters
+        val pointsInBlob = state.allPoints.filter { it.clusterId in targetClusterIds }
 
-        // 2. Calculate the Convex Hull of this mega-group
-        // (You might need to expose your GeometryUtils.computeConvexHull to the renderer
-        //  or pre-calculate this in the Controller if performance lags)
-        val rawPoints = allCorePoints.map { Point2D(it.projectedX, it.projectedY) }
+        // Safety check: Don't try to draw a hull around nothing (or a single point)
+        if (pointsInBlob.size < 3) return
+
+        // 3. CALCULATE HULL
+        // Map to JavaFX Point2D for geometry math
+        val rawPoints = pointsInBlob.map { Point2D(it.projectedX, it.projectedY) }
+
+        // Calculate and Smooth
         val hull = geometryMath.computeConvexHull(rawPoints)
         val smoothHull = geometryMath.smoothPolygon(hull, iterations = 6)
 
-        // 3. Draw
-        g.beginPath()
+        // 4. DRAW
         if (smoothHull.isNotEmpty()) {
+            g.beginPath()
+
+            // Move to first point
             val start = coordinateMapper.worldToScreen(smoothHull[0].x, smoothHull[0].y, state.camera)
             g.moveTo(start.x, start.y)
+
+            // Connect the rest
             for (p in smoothHull.drop(1)) {
                 val sc = coordinateMapper.worldToScreen(p.x, p.y, state.camera)
                 g.lineTo(sc.x, sc.y)
             }
             g.closePath()
+
+            // Fill (Low opacity)
+            g.fill = color.deriveColor(0.0, 1.0, 1.0, 0.2) // 20% opacity fill
+            g.fill()
+
+            // Stroke (Solid)
+            g.stroke = color.brighter()
+            g.lineWidth = 3.0
+            g.stroke()
         }
-
-        g.fill = color
-        g.fill()
-
-        g.stroke = color.brighter()
-        g.lineWidth = 3.0
-        g.stroke()
     }
 }

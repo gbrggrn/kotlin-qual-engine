@@ -37,8 +37,8 @@ object LayoutEngine {
 
     data class LayoutResult(
         val positions: Map<Int, VirtualPoint> = emptyMap(),
-        val coreIds: Set<Int> = emptySet(),
-        val outlierIds: List<Set<Int>> = emptyList(),
+        val blobMap: Map<Int, List<Int>> = emptyMap(),
+        val clusterIds: List<Int> = emptyList(),
         val clusterConnections: Map<Int, List<Int>> = emptyMap()
     )
 
@@ -119,11 +119,12 @@ object LayoutEngine {
 
         // === FINALIZE
         val sortedBlobs = blobs.sortedByDescending { it.clusterIds.sumOf { cid -> counts[cid] ?: 0 } }
-        val coreIds = sortedBlobs.firstOrNull()?.clusterIds ?: emptySet()
-        val outlierIds = sortedBlobs.drop(1).map { it.clusterIds }
+        val blobMap = blobs.associate { blob ->
+            blob.id to blob.clusterIds.toList()
+        }
         val connections = calculateConnections(similarityMatrix, CONNECTION_THRESHOLD)
 
-        return LayoutResult(finalPositions, coreIds, outlierIds, connections)
+        return LayoutResult(finalPositions, blobMap, uniqueIds, connections)
     }
 
     // ========================================================

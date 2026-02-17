@@ -18,10 +18,7 @@ import com.qualengine.data.pipeline.InputPipeline
 import javafx.geometry.Point2D
 import javafx.scene.control.Button
 import javafx.scene.control.TextField
-import kotlin.collections.toIntArray
 import kotlin.concurrent.thread
-import kotlin.math.cos
-import kotlin.math.sin
 
 enum class ViewMode { GLOBAL, SEARCH, SELECTION}
 
@@ -246,14 +243,22 @@ class ExplorerController {
                 val clusterMetaData = finalPoints.filter { it.clusterId == id }.map { it.enrichedMetaData }
                 labelGenerator.generateLabel(clusterMetaData, backgroundSample)
             }
-            // Core label
-            val coreDocs = finalPoints.filter { it.clusterId in clusterLayout.coreIds }.map { it.enrichedMetaData }
-            val coreLabel = labelGenerator.generateLabel(coreDocs, backgroundSample)
-            // Outlier hull labels
-            val outlierLabels = clusterLayout.outlierIds.mapIndexed { index, ids ->
-                val islandDocs = finalPoints.filter { it.clusterId in ids }.map { it.enrichedMetaData }
-                index to labelGenerator.generateLabel(islandDocs, backgroundSample)
-            }.toMap()
+            // Blob labels
+            val blobLabels = clusterLayout.blobMap.mapValues { (blobId, childClusterIds) ->
+                // Collect the clusterLabels
+                val childLabels = childClusterIds.mapNotNull { clusterId ->
+                    clusterLabels[clusterId]
+                }
+                if (childLabels.isNotEmpty()) {
+                    labelGenerator.generateLabel(childLabels, backgroundSample)
+                } else {
+                    "Unlabeled blob"
+                }
+            }
+            // Blob Ids
+            val blobIds = clusterLayout.blobMap.map { (blobId, clusterIds) ->
+                blobId
+            }
 
             // === COMMIT TO STATE ===
             Platform.runLater {
@@ -268,12 +273,12 @@ class ExplorerController {
                     clusterCenters = clusterLayout.positions,
                     clusterShapes = clusterShapes,
                     camera = initialCamera,
-                    coreClusterIds = clusterLayout.coreIds,
-                    outlierClusterIds = clusterLayout.outlierIds,
+                    outlierClusterIds = clusterLayout.clusterIds,
                     clusterConnections = clusterLayout.clusterConnections,
                     clusterLabels = clusterLabels,
-                    coreLabel = coreLabel,
-                    outlierLabels = outlierLabels
+                    blobLabels = blobLabels,
+                    blobIds = blobIds,
+                    blobMap = clusterLayout.blobMap
                 )
 
                 // Update Global State
