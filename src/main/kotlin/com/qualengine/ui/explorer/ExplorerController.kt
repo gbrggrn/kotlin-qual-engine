@@ -23,15 +23,14 @@ import kotlin.concurrent.thread
 enum class ViewMode { GLOBAL, SEARCH, SELECTION}
 
 class ExplorerController {
-    // --- Config
+    // Config
     private var currentMode = ViewMode.GLOBAL
     private var currentFilterId: String? = null
     private val numberOfDetailsFor = 50
 
-    // --- Dependencies
+    // Dependencies
     private val ollamaClient = DependencyRegistry.ollamaClient
     private val databaseFactory = DependencyRegistry.databaseFactory
-    private val ollamaEnricher = DependencyRegistry.ollamaEnricher
     private val clusterRefiner = DependencyRegistry.clusterRefiner
     private val layoutEngine = DependencyRegistry.layoutEngine
     private val geometryMath = DependencyRegistry.geometryMath
@@ -40,10 +39,10 @@ class ExplorerController {
     private lateinit var pipeline: InputPipeline
     private lateinit var coordinateMapper: CoordinateMapper
 
-    // --- Local cache of raw data
+    // Local cache of raw data
     private var cachedPoints: List<VectorPoint> = emptyList()
 
-    // --- UI Injection
+    // UI Injection
     @FXML private lateinit var mapContainer: StackPane
     @FXML private lateinit var mapCanvas: Canvas
     @FXML private lateinit var loadingBox: VBox
