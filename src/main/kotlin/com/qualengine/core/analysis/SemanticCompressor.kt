@@ -59,6 +59,9 @@ object SemanticCompressor {
         "high", "low", "big", "small", "large", "much", "many", "less", "least", "more", "most"
     )
 
+    //Settings
+    private const val MAX_RETURN_LENGTH = 250;
+
     fun compress(text: String): String {
         if (text.isBlank())
             return ""
@@ -90,8 +93,8 @@ object SemanticCompressor {
 
         val result = signals.joinToString(" ")
 
-        return if (result.length > 250) {
-            result.take(250) + "..."
+        return if (result.length > MAX_RETURN_LENGTH) {
+            result.take(MAX_RETURN_LENGTH) + "..."
         } else {
             result
         }
