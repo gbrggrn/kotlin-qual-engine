@@ -4,7 +4,6 @@ import com.qualengine.app.DependencyRegistry
 import com.qualengine.data.db.model.Documents
 import com.qualengine.core.analysis.SanityStatus
 import com.qualengine.data.db.model.Paragraphs
-import com.qualengine.data.db.model.Sentences
 import com.qualengine.data.io.implementations.DocxParser
 import com.qualengine.data.io.implementations.PDFParser
 import com.qualengine.data.model.TextBlock
@@ -23,7 +22,6 @@ object Refinery {
     private val ollamaClient = DependencyRegistry.ollamaClient
     private val ollamaEnricher = DependencyRegistry.ollamaEnricher
     private val semanticCompressor = DependencyRegistry.semanticCompressor
-    private val sentenceSplitter = DependencyRegistry.sentenceSplitter
     private val sanityFilter = DependencyRegistry.sanityFilter
     private val vectorMath = DependencyRegistry.vectorMath
     private val thematicSplitter = DependencyRegistry.thematicSplitter
@@ -33,11 +31,10 @@ object Refinery {
     private val textSanitizer = DependencyRegistry.textSanitizer
 
     fun ingestFile (file: File, onProgress: (Double, String) -> Unit) {
-        // --- Prep
         onProgress(-1.0, "Initializing stream...")
         val docId = UUID.randomUUID().toString()
 
-        // --- Generate global context
+        // === Generate global context
         // MODEL_TOKEN_LIMIT: nomic-embed-text optimized (8192 token window)
         onProgress(-1.0, "Generating global context...")
         val docSample = file.bufferedReader().use { reader ->
@@ -52,10 +49,10 @@ object Refinery {
         onProgress(-1.0, "Vectorizing global context...")
         val docVector = ollamaClient.getVector(docSample, MODEL_TOKEN_LIMIT)
 
-        // --- Save global (document) context
+        // === Save global (document) context
         saveDocument(docId, file, docSample, docVector)
 
-        // --- Process the stream
+        // === Process the stream
         processStream(docId, docVector, file, onProgress)
 
         onProgress(1.0, "Done. Document Hierarchy stored")
@@ -74,7 +71,7 @@ object Refinery {
         // Initialize the queue with the raw stream
         val rawStream = selectedParser.parse(file).iterator()
 
-        // --- TRIAGE LOOP ---
+        // === TRIAGE LOOP
         while (rawStream.hasNext() || blockQueue.isNotEmpty()) {
             // Process queue (split) before pulling new raw block
             val rawBlock = if(blockQueue.isNotEmpty()) {
@@ -83,19 +80,19 @@ object Refinery {
                 rawStream.next()
             }
 
-            // --- STEP 1: SANITIZE ---
+            // === SANITIZE
             val cleanText = textSanitizer.sanitize(rawBlock.rawText)
 
             // Add the sanitized text to current block
             val currentBlock = rawBlock.copy(rawText = cleanText)
 
-            // --- STEP 1: SANITY FILTER ---
+            // === SANITY FILTER
             // Extract micro blocks
             val sanity = sanityFilter.evaluate(currentBlock.rawText)
             if (sanity == SanityStatus.NOISE)
                 continue // Discard noise immediately
 
-            // -- STEP 2: SPLIT CHECK ---
+            // === SPLIT CHECK
             // Try to split large blocks semantically
             if (currentBlock.rawText.length > 1500) {
                 onProgress(-1.0, "Splitting massive text block (${currentBlock.rawText.length} chars)")
@@ -111,7 +108,7 @@ object Refinery {
                 }
             }
 
-            // -- STEP 3: ENRICH & VECTORIZE ---
+            // === ENRICH AND VECTORIZE
             // Blocks are now clean and sized correctly
             val compressed = semanticCompressor.compress(previousContext)
 
@@ -135,7 +132,7 @@ object Refinery {
                     rawVector
                 }
 
-                // --- SAVE ---
+                // === SAVE
                 val paragraphId = UUID.randomUUID().toString()
                 saveBlockAsParagraph(
                     paragraphId,
@@ -145,38 +142,9 @@ object Refinery {
                     blockIndex++,
                     finalVector,
                     sanity)
-
-                // Break down into sentences for quotes
-                if (sanity == SanityStatus.CLEAN) {
-                    processSentences(
-                        paragraphId,
-                        docId,
-                        currentBlock.rawText)
-                }
             }
             if (blockIndex % 5 == 0)
                 onProgress(-1.0, "Processed $blockIndex text blocks")
-        }
-    }
-
-    private fun processSentences(paragraphId: String, docId: String, paragraphContent: String) {
-        val sentences = sentenceSplitter.split(docId, paragraphId, paragraphContent)
-
-        transaction {
-            for (s in sentences) {
-                // Vectorize each sentence individually
-                val sentenceVector = ollamaClient.getVector(s.content, SENTENCE_TOKEN_LIMIT) // Smaller window for speed
-
-                Sentences.insert {
-                    it[this.id] = s.id
-                    it[this.docId] = s.docId
-                    it[this.paragraphId] = s.paragraphId
-                    it[this.content] = s.content
-                    it[this.vector] = sentenceVector.joinToString(",")
-                    it[this.index] = s.index
-                    it[status] = SanityStatus.CLEAN.name
-                }
-            }
         }
     }
 
