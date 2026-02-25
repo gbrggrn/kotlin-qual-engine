@@ -7,6 +7,8 @@ import kotlin.math.*
 
 object LayoutEngine {
 
+    // NOTE: This was implemented with the help of Gemini.
+
     private val vectorMath = DependencyRegistry.vectorMath
 
     // === TUNING ===
@@ -131,10 +133,10 @@ object LayoutEngine {
     // LOGIC: SPIRAL PLACEMENT
     // ========================================================
 
-    /**
-     * 1. Projects items to their "Ideal" semantic position.
-     * 2. If that spot is taken, spirals outward until a free spot is found.
-     */
+    // ==================================================================
+    // Projects items to their "Ideal" semantic position.
+    // If that spot is taken, spirals outward until a free spot is found.
+    // ==================================================================
     private fun <T> projectAndPlaceSpiral(
         items: List<T>,
         itemCentroids: Map<Int, DoubleArray>,
