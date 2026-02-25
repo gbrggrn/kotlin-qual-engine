@@ -11,7 +11,7 @@ object TextFileParser : IOParser {
 
             for(line in lines) {
                 if (line.isBlank()) {
-                    // --- Line break means split ---
+                    // === Line break means split
                     if (buffer.isNotEmpty()) {
                         val finalBlock = buffer.toString().trim()
                         if (finalBlock.isNotEmpty()) {
@@ -20,14 +20,14 @@ object TextFileParser : IOParser {
                         buffer.clear()
                     }
                 } else {
-                    // --- Content accumulation ---
+                    // === Content accumulation
                     if (buffer.isNotEmpty()) {
                         buffer.append(" ")
                     }
                     buffer.append(line.trim())
                 }
             }
-            // --- Final flush ---
+            // === Final flush
             // If file ends without a newline: yield what is left of it
             if (buffer.isNotEmpty()) {
                 val finalBlock = buffer.toString().trim()
