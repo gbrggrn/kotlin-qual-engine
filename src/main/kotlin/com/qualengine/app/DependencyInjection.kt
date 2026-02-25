@@ -5,7 +5,6 @@ import com.qualengine.core.analysis.LabelGenerator
 import com.qualengine.core.analysis.OllamaEnricher
 import com.qualengine.core.analysis.SanityFilter
 import com.qualengine.core.analysis.SemanticCompressor
-import com.qualengine.core.analysis.SentenceSplitter
 import com.qualengine.core.analysis.TextSanitizer
 import com.qualengine.core.analysis.ThematicSplitter
 import com.qualengine.core.clustering.ClusterRefiner
@@ -33,7 +32,6 @@ object DependencyRegistry {
     val ollamaEnricher by lazy { OllamaEnricher }
     val sanityFilter by lazy { SanityFilter }
     val semanticCompressor by lazy { SemanticCompressor }
-    val sentenceSplitter by lazy { SentenceSplitter }
     val thematicSplitter by lazy { ThematicSplitter }
     // - Clustering
     val clusterRefiner by lazy { ClusterRefiner }
