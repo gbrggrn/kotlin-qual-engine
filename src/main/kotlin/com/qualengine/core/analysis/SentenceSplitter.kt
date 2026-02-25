@@ -11,7 +11,7 @@ object SentenceSplitter {
         if (text.isBlank())
             return emptyList()
 
-        // --- Split by pattern
+        // Split by pattern
         val rawSentences = text.split(SENTENCE_PATTERN)
         val sentenceList = mutableListOf<Sentence>()
         var orderIndex = 0
