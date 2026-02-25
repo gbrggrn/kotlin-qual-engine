@@ -37,7 +37,7 @@ object OllamaEnricher {
         if (!needsHelp || current.length > 200) return current
 
         println("[Enricher] Enriching paragraph...")
-        
+
         // THE LOBOTOMIZED PROMPT!
         val prompt = """
             <|user|>
