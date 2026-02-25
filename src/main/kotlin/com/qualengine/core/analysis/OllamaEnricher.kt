@@ -17,19 +17,28 @@ object OllamaEnricher {
     private const val MODEL_NAME = "phi3"
     private const val OLLAMA_URL = "http://localhost:11434/api/generate"
 
-    /**
-     * Takes the current paragraph and the previous one (context).
-     * Returns a rewritten version that is standalone and explicit.
-     */
+    // Settings
+    private const val MAX_TOKENS = 60;
+    private const val CREATIVITY_SETTING = 0.0;
+    private const val MODEL_ACTIVE_TIME = "5m";
+    private const val SECONDS_UNTIL_TIMEOUT: Long = 60;
+
+    // Responses
+    private const val RESPONSE_OK = 200;
+
+    // =============================================================
+    // Takes the current paragraph and the previous one (context).
+    // Returns a rewritten version that is standalone and explicit.
+    // =============================================================
     fun enrichParagraph(current: String, previous: String): String {
         // Cheap filter to reduce load on llm
         val vagueTriggers = listOf("it ", "this ", "that ", "they ", "he ", "she ", "the system", "the error")
         val needsHelp = vagueTriggers.any { current.lowercase().contains(it) }
         if (!needsHelp || current.length > 200) return current
 
+        println("[Enricher] Enriching paragraph...")
+        
         // THE LOBOTOMIZED PROMPT!
-        // Phi-3 follows the <|user|> ... <|assistant|> pattern strictly.
-        // Trick it by starting the assistant's response for it with "Rewritten: "
         val prompt = """
             <|user|>
             Task: Rewrite the Target text to be specific. Resolve "it", "this", "they" using the Context.
@@ -42,8 +51,8 @@ object OllamaEnricher {
         """.trimIndent()
 
         val options = JSONObject()
-        options.put("num_predict", 60)   // Hard limit: Stop after 60 tokens (approx 40 words)
-        options.put("temperature", 0.0)  // 0.0 = Lobotomized mode (No creativity)
+        options.put("num_predict", MAX_TOKENS)   // Hard limit = MAX_TOKENS
+        options.put("temperature", CREATIVITY_SETTING)  // 0.0 = Lobotomized mode (No creativity)
         options.put("stop", JSONArray().put("\n").put("<|end|>")) // STOP immediately at a new line
 
         val json = JSONObject()
@@ -51,20 +60,20 @@ object OllamaEnricher {
         json.put("prompt", prompt)
         json.put("stream", false)
         json.put("options", options)
-        json.put("keep_alive", "5m") // Keep model in RAM for 5 mins - first prompt slow and the rest fast
+        json.put("keep_alive", MODEL_ACTIVE_TIME) // Suggested 5 minutes for additional calls
 
         val request = HttpRequest.newBuilder()
             .uri(URI.create(OLLAMA_URL))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
-            .timeout(Duration.ofSeconds(60)) // Hard timeout if too slow execution
+            .timeout(Duration.ofSeconds(SECONDS_UNTIL_TIMEOUT)) // Hard timeout if too slow execution
             .build()
 
         return try {
             val response = client.send(request, HttpResponse.BodyHandlers.ofString())
             val body = response.body()
 
-            if (response.statusCode() != 200) {
+            if (response.statusCode() != RESPONSE_OK) {
                 println("[Enricher Error] Status ${response.statusCode()}")
                 return current
             }
@@ -81,80 +90,6 @@ object OllamaEnricher {
         } catch (e: Exception) {
             println("[Enricher Exception]: ${e.message}")
             current
-        }
-    }
-
-    fun summarizeCluster(snippets: List<String>) : String {
-        if (snippets.isEmpty())
-            return "Unknown cluster."
-
-        // Read 5 paragraphs, shuffle to get representative data
-        val sample = snippets.shuffled().take(5).joinToString("\n-")
-
-        val prompt = """
-            <|user|>
-            Task: Identify the specific THEME of these snippets.
-            Output format: A short, punchy category label
-            CONSTRAINT: Output strictly 1 - 3 words
-            
-            - DO NOT USE NUMBERING
-            - DO NOT WRITE FULL SENTENCES
-            - DO NOT USE QUOTES
-            - DO NOT USE PUNCTUATION
-            - DO NOT USE "and"
-            - NO FILLER WORDS
-            
-            GOOD Examples:
-            - "Database Latency Issues"
-            - "Frontend Memory Leaks"
-            - "Staff Burnout"
-            - "Q3 Budget Cuts"
-
-            Snippets:
-            - $sample
-            
-            Theme Label:
-            <|end|>
-            <|assistant|>
-        """.trimIndent()
-
-        val options = JSONObject()
-        options.put("num_predict", 10)
-        options.put("temperature", 0.3)
-        options.put("stop", JSONArray().put("\n").put("<|end|>"))
-
-        val json = JSONObject()
-        json.put("model", MODEL_NAME)
-        json.put("prompt", prompt)
-        json.put("stream", false)
-        json.put("options", options)
-        json.put("keep_alive", "5m")
-
-        val request = HttpRequest.newBuilder()
-            .uri(URI.create(OLLAMA_URL))
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
-            .timeout(Duration.ofSeconds(50))
-            .build()
-
-        return try {
-            val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-            val responseJson = JSONObject(response.body())
-
-            if (responseJson.has("response")) {
-                var text = responseJson.getString("response").trim()
-                // Cleanup
-                text = text
-                    .removePrefix("Title:")
-                    .removePrefix("Label:")
-                    .removePrefix("-").trim()
-                text.removeSurrounding("\"")
-            } else {
-                "Cluster"
-            }
-        } catch (e: Exception) {
-            println("[Summarizer error]: ${e.message}")
-            "Cluster (Error)"
         }
     }
 }
