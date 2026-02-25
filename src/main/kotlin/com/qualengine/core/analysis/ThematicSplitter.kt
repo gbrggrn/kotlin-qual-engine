@@ -9,28 +9,31 @@ object ThematicSplitter {
     private val vectorMath = DependencyRegistry.vectorMath
     private val sentenceSplitter = DependencyRegistry.sentenceSplitter
 
-    // Config
-    private const val MIN_CHUNK_SIZE = 1000
+    // Settings
+    private const val MIN_SENTENCES_PER_CHUNK = 4
     private const val SENTENCE_TOKEN_LIMIT = 200
+    private const val SPLIT_INDEX = -1
+    private const val LOWEST_SIMILARITY_COSINE_ANGLE = 1.0
+    private const val MAX_RAW_TEXT_LENGTH = 3000;
 
     fun attemptSplit(block: TextBlock, docId: String): List<TextBlock> {
-        // --- Split into sentences
+        // === Split into sentences
         val sentences = sentenceSplitter.split(docId, "temp_split_id", block.rawText)
 
         // No split if there are too few sentences
-        if (sentences.size < 4)
+        if (sentences.size < MIN_SENTENCES_PER_CHUNK)
             return listOf(block)
 
-        // --- Vectorize sentences (memory heavy)
+        // === Vectorize sentences (memory heavy)
         val vectors = sentences.map { s ->
             ollamaClient.getVector(s.content, SENTENCE_TOKEN_LIMIT)
         }
 
-        // --- Scan for potential split-points
+        // === Scan for potential split-points
         // Basically looking for "fault lines" or the deepest semantic valley between sentences.
-        var lowestSimilarity = 1.0
-        var splitIndex = -1
-        val buffer = 1 // Minimum of sentences per chunk
+        var lowestSimilarity = LOWEST_SIMILARITY_COSINE_ANGLE
+        var splitIndex = SPLIT_INDEX
+        val buffer = 1
 
         for (i in buffer until sentences.size - buffer) {
             val vecA = vectors[i]
@@ -47,20 +50,20 @@ object ThematicSplitter {
             }
         }
 
-        // --- Evaluate the split points
+        // === Evaluate the split points
         // If similarity is still high (coherent text), split it anyway to respect token limits
-        val threshold = if (block.rawText.length > 3000)
+        val threshold = if (block.rawText.length > MAX_RAW_TEXT_LENGTH)
             0.85 else 0.65
 
         if (splitIndex != -1 && lowestSimilarity < threshold) {
-            // --- Sentences 0 to splitIndex
+            // Sentences 0 to splitIndex
             val textA = sentences.slice(0..splitIndex).joinToString(" ") { it.content }
 
-            // --- Sentences splitIndex + 1 to end
+            // Sentences splitIndex + 1 to end
             val overlap = sentences[splitIndex].content
             val textB = overlap + " " + sentences.slice(splitIndex + 1 until sentences.size).joinToString(" ") { it.content }
 
-            // --- Return the split TextBlock in two parts
+            // Return the split TextBlock in two parts
             return listOf(
                 TextBlock(textA, sourceFileName = block.sourceFileName),
                 TextBlock(textB, sourceFileName = block.sourceFileName)
