@@ -11,21 +11,20 @@ class DBSCAN(
     private val vectorMath = DependencyRegistry.vectorMath
 
     fun runDBSCAN(points: List<VectorPoint>): ClusterResult {
-        // BRIDGE: Extract the arrays straight away.
-        // vectors is now List<DoubleArray>
+        // === Extract vectors (embeddings)
         val vectors = points.map { it.embedding }
 
         val n = vectors.size
         val labels = IntArray(n) { 0 }
         var clusterId = 0
 
-        // Optimization: Pre-calculate vector magnitudes
+        // Pre-calculate vector magnitudes
         val magnitudes = vectors.map { vectorMath.getMagnitude(it) }.toDoubleArray()
 
         for (i in 0 until n) {
             if (labels[i] != 0) continue
 
-            // Pass the RAW vectors (List<DoubleArray>) to the helpers
+            // Pass the RAW vectors to the helpers
             val neighbors = getNeighbors(vectors, magnitudes, i)
 
             if (neighbors.size < minPoints) {
@@ -44,8 +43,9 @@ class DBSCAN(
         )
     }
 
-    // --- Helpers ---
-
+    // ==================================
+    // HELPERS
+    // ==================================
     private fun expandCluster(
         vectors: List<DoubleArray>,
         magnitudes: DoubleArray,
