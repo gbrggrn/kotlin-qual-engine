@@ -38,22 +38,17 @@ class ExplorerRenderer(
         val width = canvas.width
         val height = canvas.height
         val camera = state.camera
-        val shapePoints = state.clusterShapes
 
-        // 1. CLEAR SCREEN
+        // Clear screen
         graphics.fill = Color.web("#1e272e")
         graphics.fillRect(0.0, 0.0, width, height)
 
         if (state.allPoints.isEmpty()) return
 
-        // 2. CALCULATE LEVEL OF DETAIL (LOD)
-        // This is the "Semantic Zoom" logic
+        // Get current zoom setting
         val zoom = camera.zoom
 
-        // Strategy:
-        // Zoom < 0.2  : Galaxy View (Hulls + Big Labels only)
-        // Zoom > 0.2  : Region View (Points appear as dots)
-        // Zoom > 1.5  : Street View (Text snippets appear)
+        // Zoom settings
         val showHulls = true
         val showPoints = zoom > 0.4
         val showDetails = zoom > 1.5
@@ -61,18 +56,15 @@ class ExplorerRenderer(
         val fadeClusterLabels = zoom !in 0.4..2.0 // Hide big theme labels when deep in the weeds
 
         // ==================================================
-        // THE TERRITORIES (Hulls)
+        // THE HULLS
         // ==================================================
         if (isGalaxyView){
-            // === GALAXY VIEW ===
-
-            // 1. Draw The "Blob" (Super-Hull)
+            // === Draw The "Blob" (Super-Hull)
             for (id in state.blobIds) {
                 drawSuperHull(graphics, state, id, Color.rgb(100, 150, 255, 0.2))
             }
 
-            // 2. Draw The Outliers (Normal Hulls, but maybe simpler?)
-            // For now, let's just draw their normal hulls to show they are distinct
+            // === Draw The Outliers (Normal Hulls, but maybe simpler?)
             //drawSuperHull(graphics, state, state.outlierClusterIds, Color.rgb(100, 150, 255, 0.2))
         }
 
@@ -80,7 +72,7 @@ class ExplorerRenderer(
             for ((id, shapePoints) in state.clusterShapes) {
                 if (shapePoints.isEmpty()) continue
 
-                // --- FALLBACK FOR TINY CLUSTERS ---
+                // === FALLBACK FOR TINY CLUSTERS
                 // If hull failed or too small, draw a simple blob
                 if (shapePoints.size < 3) {
                     val center = state.clusterCenters[id] ?: continue
@@ -92,7 +84,7 @@ class ExplorerRenderer(
                     continue
                 }
 
-                // --- DRAW ORGANIC HULL ---
+                // === DRAW ORGANIC HULL
                 graphics.beginPath()
 
                 val first = coordinateMapper.worldToScreen(shapePoints[0].x, shapePoints[0].y, camera)
@@ -210,7 +202,7 @@ class ExplorerRenderer(
         // ==================================================
         // PHASE 3: THE MAP LABELS (Cluster Themes)
         // ==================================================
-        // We draw these last so they float on top
+        // Draw these last so they float on top
         if (!fadeClusterLabels) {
             graphics.textAlign = TextAlignment.CENTER
             graphics.textBaseline = VPos.BOTTOM
@@ -233,7 +225,7 @@ class ExplorerRenderer(
         }
 
         // ==================================================
-        // PHASE 4: SELECTION MARQUEE
+        // PHASE 4: SELECTION
         // ==================================================
         if (state.isDragging) {
             val startX = minOf(state.dragStartX, state.dragCurrentX)
@@ -253,19 +245,19 @@ class ExplorerRenderer(
     }
 
     private fun drawSuperHull(g: javafx.scene.canvas.GraphicsContext, state: AppState, blobId: Int, color: Color) {
-        // 1. IDENTIFY TARGET CLUSTERS
+        // === IDENTIFY TARGET CLUSTERS
         // Look up which clusters belong to this specific Blob ID
         val targetClusterIds = state.blobMap[blobId]
         if (targetClusterIds.isNullOrEmpty()) return
 
-        // 2. COLLECT POINTS
+        // === COLLECT POINTS
         // Filter the world points to finding only those belonging to the target clusters
         val pointsInBlob = state.allPoints.filter { it.clusterId in targetClusterIds }
 
-        // Safety check: Don't try to draw a hull around nothing (or a single point)
+        // Don't try to draw a hull around nothing (or a single point)
         if (pointsInBlob.size < 3) return
 
-        // 3. CALCULATE HULL
+        // === CALCULATE HULL
         // Map to JavaFX Point2D for geometry math
         val rawPoints = pointsInBlob.map { Point2D(it.projectedX, it.projectedY) }
 
@@ -273,7 +265,7 @@ class ExplorerRenderer(
         val hull = geometryMath.computeConvexHull(rawPoints)
         val smoothHull = geometryMath.smoothPolygon(hull, iterations = 6)
 
-        // 4. DRAW
+        // === DRAW
         if (smoothHull.isNotEmpty()) {
             g.beginPath()
 
