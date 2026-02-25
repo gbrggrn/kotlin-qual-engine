@@ -3,10 +3,12 @@ package com.qualengine.core.math
 import kotlin.math.sqrt
 
 object VectorMath {
-    /**
-     * Calculates Cosine Distance (1 - Similarity).
-     * Returns 0.0 if identical, 1.0 if orthogonal, 2.0 if opposite.
-     */
+    // NOTE: This class was implemented with the help of Gemini.
+
+    // ===============================================================
+    // Calculates Cosine Distance (1 - Similarity).
+    // Returns 0.0 if identical, 1.0 if orthogonal, 2.0 if opposite.
+    // ===============================================================
     fun calculateCosineDistance(
         v1: DoubleArray, mag1: Double,
         v2: DoubleArray, mag2: Double)
