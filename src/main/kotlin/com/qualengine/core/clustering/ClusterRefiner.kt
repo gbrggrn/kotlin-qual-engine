@@ -6,12 +6,10 @@ import com.qualengine.data.model.VectorPoint
 object ClusterRefiner {
     private val vectorMath = DependencyRegistry.vectorMath
 
-    /**
-     * The "Orphanage": Looks for "Noise" points (-1) and assigns them to a cluster
-     * if they are within [maxDistance] of that cluster's centroid.
-     * * @param points The full list of data points.
-     * @param clusterIds The mutable array of current cluster assignments (modified in-place).
-     */
+    // ==============================================================================
+    // The "Orphanage": Looks for "Noise" points (-1) and assigns them to a cluster
+    // if they are within [maxDistance] of that cluster's centroid.
+    // ==============================================================================
     fun assignOrphans(
         points: List<VectorPoint>,
         clusterIds: IntArray,
@@ -19,12 +17,12 @@ object ClusterRefiner {
     ) {
         if (points.isEmpty()) return
 
-        // 1. Calculate Centroids for valid clusters
+        // === Calculate Centroids for valid clusters
         val centroids = mutableMapOf<Int, DoubleArray>()
         val counts = mutableMapOf<Int, Int>()
         val dimensions = points[0].embedding.size
 
-        // Sum up vectors (Fast Accumulation)
+        // Sum up vectors
         for (i in points.indices) {
             val id = clusterIds[i]
             if (id == -1) continue // Skip noise
@@ -54,7 +52,7 @@ object ClusterRefiner {
             vectorMath.getMagnitude(points[i].embedding)
         }
 
-        // 2. Loop through Orphans
+        // === Loop through Orphans
         var adoptedCount = 0
         for (i in points.indices) {
             if (clusterIds[i] == -1) { // It's an orphan
@@ -77,7 +75,7 @@ object ClusterRefiner {
                     }
                 }
 
-                // 3. Adopt if close enough
+                // === Adopt if close enough
                 if (bestCluster != -1 && bestDist <= maxDistance) {
                     clusterIds[i] = bestCluster
                     adoptedCount++
@@ -85,29 +83,22 @@ object ClusterRefiner {
             }
         }
 
-        println("ClusterRefiner: Adopted $adoptedCount orphans into clusters.")
+        println("[ClusterRefiner] Adopted $adoptedCount orphans into clusters.")
     }
 
-    // --- CONFIGURATION ---
-    // The "Hard Limit". No cluster shall pass this size.
+    // Settings
     private const val MAX_CLUSTER_SIZE = 20
-
-    // The "Dust Limit". Don't create shards smaller than this.
-    // This prevents splitting a cluster of 21 into 20 and 1.
     private const val MIN_FRAGMENT_SIZE = 5
 
-    /**
-     * The Entry Point: Takes the initial DBSCAN results and fractures them
-     * until every cluster meets the MAX_CLUSTER_SIZE constraint.
-     */
+    // ======================================================================
+    // The Entry Point: Takes the initial DBSCAN results and fractures them
+    // until every cluster meets the MAX_CLUSTER_SIZE constraint.
+    // ======================================================================
     fun splitLargeClusters(points: List<VectorPoint>, clusterIds: IntArray): IntArray {
         val newClusterIds = clusterIds.clone()
         var nextClusterId = (clusterIds.maxOrNull() ?: 0) + 1
 
-        // 1. Group indices by their current Cluster ID
-        // Filter out -1 (Noise) for now, we'll handle them separately if needed
-        // OR: Include noise if you want to cluster the garbage too.
-        // Let's include noise as a specific "Cluster 0" to see if it breaks down nicely.
+        // === Group indices by their current Cluster ID
         val clusters = clusterIds.indices.groupBy {
             if (clusterIds[it] == -1) Int.MAX_VALUE else clusterIds[it]
         }
@@ -136,20 +127,20 @@ object ClusterRefiner {
         return newClusterIds
     }
 
-    /**
-     * Recursively splits a list of indices until all chunks are <= MAX_CLUSTER_SIZE.
-     */
+    // ===============================================================================
+    // Recursively splits a list of indices until all chunks are <= MAX_CLUSTER_SIZE.
+    // ===============================================================================
     private fun recursiveSplit(indices: List<Int>, points: List<VectorPoint>): List<List<Int>> {
-        // 1. BASE CASE: Success!
+        // === BASE CASE: Success!
         if (indices.size <= MAX_CLUSTER_SIZE) {
             return listOf(indices)
         }
 
-        // 2. LINEARIZE: Find the best axis to project onto
+        // === LINEARIZE: Find the best axis to project onto
         val vectors = indices.map { points[it].embedding }
         val centroid = vectorMath.calculateCentroid(vectors)
 
-        // Find furthest point to define the "Long Axis" of the cloud
+        // Find furthest point to define the "long axis" of the cloud
         val furthestVector = vectors.maxByOrNull { vectorMath.distance(it, centroid) }
             ?: return listOf(indices)
 
@@ -161,9 +152,9 @@ object ClusterRefiner {
             vectorMath.dotProduct(points[index].embedding, axis)
         }
 
-        // 3. FIND THE BEST CUT
-        // We look for the largest semantic gap, BUT we are constrained by MIN_FRAGMENT_SIZE.
-        // We cannot cut at index 0 or index (size-1).
+        // === FIND THE BEST CUT
+        // Look for the largest semantic gap, BUT NOT constrained by MIN_FRAGMENT_SIZE.
+        // Cannot cut at index 0 or index (size-1).
 
         val projections = sortedIndices.map { vectorMath.dotProduct(points[it].embedding, axis) }
 
@@ -188,12 +179,12 @@ object ClusterRefiner {
             }
         }
 
-        // 4. EXECUTE SPLIT
+        // === EXECUTE SPLIT
         if (bestSplitIndex != -1) {
             val clusterA = sortedIndices.subList(0, bestSplitIndex + 1)
             val clusterB = sortedIndices.subList(bestSplitIndex + 1, sortedIndices.size)
 
-            // Recurse! Keep splitting A and B until they behave.
+            // Keep splitting A and B until they behave.
             return recursiveSplit(clusterA, points) + recursiveSplit(clusterB, points)
         }
 
