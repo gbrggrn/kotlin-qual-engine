@@ -3,21 +3,22 @@ package com.qualengine.core.math
 import javafx.geometry.Point2D
 
 object GeometryMath {
+    // NOTE: This class was implemented with the help of Gemini.
 
-    /**
-     * ALGORITHM: JARVIS MARCH (Gift Wrapping)
-     * Guaranteed to produce a valid convex hull loop.
-     */
+    // =====================================================
+    // ALGORITHM: JARVIS MARCH (Gift Wrapping)
+    // Guaranteed to produce a valid convex hull loop.
+    // =====================================================
     fun computeConvexHull(points: List<Point2D>): List<Point2D> {
         if (points.size < 3) return points
 
         val hull = mutableListOf<Point2D>()
 
-        // 1. Find the Leftmost point (Guaranteed to be on hull)
+        // === Find the Leftmost point (Guaranteed to be on hull)
         val start = points.minWithOrNull(compareBy { it.x }) ?: return points
         var current = start
 
-        // 2. Wrap around the points like a string
+        // === Wrap around the points like a string
         do {
             hull.add(current)
             var next = points[0]
@@ -39,44 +40,10 @@ object GeometryMath {
         return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
     }
 
-    /*
-    // === MONOTONE CHAIN
-    // Wraps sets of points (clusters) in a tight polygon
-    fun computeConvexHull(points: List<Point2D>): List<Point2D> {
-        // This means it's not clustered, just for safety
-        if (points.size < 3)
-            return points
-
-        // Sort by x, then y
-        val sorted = points.sortedWith(compareBy<Point2D> { it.x }.thenBy { it.y })
-
-        val upper = mutableListOf<Point2D>()
-        for(p in sorted) {
-            while(upper.size >= 2 && crossProduct(upper[upper.size - 2], upper.last(), p) <= 0) {
-                upper.removeAt(upper.size - 1)
-            }
-            upper.add(p)
-        }
-
-        val lower = mutableListOf<Point2D>()
-        for(p in sorted.reversed()) {
-            while(lower.size >= 2 && crossProduct(lower[lower.size - 2], lower.last(), p) >= 0) {
-                lower.removeAt(lower.size - 1)
-            }
-            lower.add(p)
-        }
-
-        return upper.dropLast(1) + lower.dropLast(1)
-    }
-
-    private fun crossProduct(a: Point2D, b: Point2D, c: Point2D): Double {
-        return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
-    }
-
-     */
-
-    // === CHAIKINS SMOOTHING
+    // ===================================================================
+    // CHAIKINS SMOOTHING
     // Cuts the corners of a polygon to make it round and smoooooth
+    // ===================================================================
     fun smoothPolygon(points: List<Point2D>, iterations: Int = 3, tension: Double = 0.25): List<Point2D> {
         if (points.size < 3)
             return points
