@@ -8,6 +8,10 @@ import javafx.scene.input.MouseEvent
 import javafx.scene.input.ScrollEvent
 import kotlin.math.hypot
 
+// TODO: Refactor settings to consts
+
+// NOTE: Gemini helped with some of the math.
+
 class InputPipeline(
     private val mainCanvas: Canvas// Renamed for clarity
 ) {
@@ -29,20 +33,20 @@ class InputPipeline(
     private var dragStartY = 0.0
 
     // =================================================================
-    // 1. ZOOM (The Camera Logic)
+    // ZOOM (The Camera Logic)
     // =================================================================
     fun handleScroll(event: ScrollEvent) {
         val currentCamera = context.state.camera
         val zoomFactor = 1.1
 
-        // 1. Calculate new zoom
+        // === Calculate new zoom
         val newZoom = if (event.deltaY > 0) {
             currentCamera.zoom * zoomFactor
         } else {
             currentCamera.zoom / zoomFactor
         }.coerceIn(0.01, 50.0) // Clamp to prevent infinity
 
-        // 2. Zoom towards mouse cursor
+        // === Zoom towards mouse cursor
         // Where is the mouse in the world NOW?
         val mouseWorld = coordinateMapper.screenToWorld(event.x, event.y, currentCamera)
 
@@ -54,14 +58,14 @@ class InputPipeline(
         val newCamX = mouseWorld.x - (screenOffsetX / newZoom)
         val newCamY = mouseWorld.y - (screenOffsetY / newZoom)
 
-        // 3. Commit
+        // === Commit
         val newCamera = currentCamera.copy(x = newCamX, y = newCamY, zoom = newZoom)
         context.update(context.state.copy(camera = newCamera))
         controller.requestRender() // Helper in controller to trigger render
     }
 
     // =================================================================
-    // 2. MOUSE PRESS (Decide Intent)
+    // MOUSE PRESS (Decide Intent)
     // =================================================================
     fun handleMousePressed(event: MouseEvent) {
         lastMouseX = event.x
@@ -70,14 +74,13 @@ class InputPipeline(
         dragStartY = event.y
         isDragging = false
 
-        // DECISION: Are we Panning or Selecting?
         // Shift = Marquee Selection. No Shift = Panning.
         isMarqueeMode = event.isShiftDown || event.isShortcutDown
 
         if (isMarqueeMode) {
             // Start Drawing the Selection Box
             context.update(context.state.copy(
-                isDragging = true, // Re-using existing flag for UI overlay
+                isDragging = true, // Re-use existing flag for UI overlay
                 dragStartX = event.x,
                 dragStartY = event.y,
                 dragCurrentX = event.x,
@@ -87,7 +90,7 @@ class InputPipeline(
     }
 
     // =================================================================
-    // 3. DRAG (Execute Intent)
+    // DRAG
     // =================================================================
     fun handleMouseDragged(event: MouseEvent) {
         // Check Threshold to avoid micro-jitters
@@ -134,13 +137,10 @@ class InputPipeline(
             dragCurrentX = event.x,
             dragCurrentY = event.y
         ))
-
-        // Optional: Real-time selection highlighting can go here
-        // (But usually better to do it on Release for performance)
     }
 
     // =================================================================
-    // 4. RELEASE (Commit Selection)
+    // RELEASE (Commit Selection)
     // =================================================================
     fun handleMouseReleased(event: MouseEvent) {
         if (isMarqueeMode && isDragging) {
@@ -174,7 +174,7 @@ class InputPipeline(
     }
 
     // =================================================================
-    // 5. HOVER & CLICK
+    // HOVER & CLICK
     // =================================================================
     fun handleMouseMove(event: MouseEvent) {
         if (isDragging) return
@@ -232,160 +232,3 @@ class InputPipeline(
         controller.requestRender()
     }
 }
-
-/*
-import javafx.scene.input.MouseEvent
-import com.qualengine.core.AnalysisContext
-import com.qualengine.data.model.VectorPoint
-import com.qualengine.ui.explorer.ExplorerController
-import com.qualengine.ui.explorer.ViewMode
-import kotlin.math.hypot
-import kotlin.math.sqrt
-import kotlin.math.pow
-
-class InputPipeline(
-    private val context: AnalysisContext,
-    private val explorerController: ExplorerController
-) {
-    private val PADDING = 40.0
-    private val DRAG_THRESHOLD = 5.0
-    private var isRealDrag = false
-
-    private fun toScreenX(normalizedX: Double, width: Double): Double {
-        return normalizedX * (width - PADDING * 2) + PADDING
-    }
-
-    private fun toScreenY(normalizedY: Double, height: Double): Double {
-        return normalizedY * (height - PADDING * 2) + PADDING
-    }
-
-    fun handleScroll(event: MouseEvent) {
-
-    }
-
-    fun handleMousePressed(event: MouseEvent) {
-        val current = context.state
-
-        isRealDrag = false
-
-        // Logic: Clear selection UNLESS holding shift/control
-        val newSelection = if (!event.isShiftDown && !event.isShortcutDown) {
-            emptySet()
-        } else {
-            current.selectedPoints
-        }
-
-        context.update(current.copy(
-            isDragging = true,
-            dragStartX = event.x,
-            dragStartY = event.y,
-            dragCurrentX = event.x,
-            dragCurrentY = event.y,
-            selectedPoints = newSelection
-        ))
-    }
-
-    fun handleMouseDragged(event: MouseEvent) {
-        val current = context.state
-        if (!current.isDragging) return
-
-        // 1. Check Threshold (Your "Real Drag" Logic)
-        if (!isRealDrag) {
-            val dist = hypot(event.x - current.dragStartX, event.y - current.dragStartY)
-            if (dist < DRAG_THRESHOLD) return // Ignore jitters
-            isRealDrag = true
-        }
-
-        // 2. Calculate Marquee Bounds
-        // We use min/max to ensure x is always top-left, even if dragging backwards
-        val boundsX = minOf(current.dragStartX, event.x)
-        val boundsY = minOf(current.dragStartY, event.y)
-        val boundsW = kotlin.math.abs(event.x - current.dragStartX)
-        val boundsH = kotlin.math.abs(event.y - current.dragStartY)
-
-        // 3. Find Points Inside
-        // OPTIMIZATION: We don't need to recalculate min/max of the dataset here.
-        // We assume projectedX is already normalized (0..1).
-        val captured = current.allPoints.filter { point ->
-            val sx = toScreenX(point.projectedX, current.width)
-            val sy = toScreenY(point.projectedY, current.height)
-
-            sx >= boundsX && sx <= boundsX + boundsW &&
-                    sy >= boundsY && sy <= boundsY + boundsH
-        }.toSet()
-
-        // 4. Update State
-        // Note: If shift is held, we usually ADD to selection, but for marquee
-        // it's often simpler to replace. Let's assume replace for the drag box.
-        context.update(current.copy(
-            dragCurrentX = event.x,
-            dragCurrentY = event.y,
-            selectedPoints = captured
-        ))
-    }
-
-    fun handleMouseReleased(event: MouseEvent) {
-        val current = context.state
-        context.update(current.copy(isDragging = false))
-        explorerController.updateNavButtons()
-    }
-
-    fun handleMouseMove(event: MouseEvent) {
-        val current = context.state
-        if (current.isDragging || current.selectedPoints.isNotEmpty()) return
-
-        val mouseX = event.x
-        val mouseY = event.y
-
-        // --- HIT TESTING ---
-        var closestAtom: VectorPoint? = null
-        var minDistance = 10.0 // Interaction Radius
-
-        for (point in current.allPoints) {
-            val sx = toScreenX(point.projectedX, current.width)
-            val sy = toScreenY(point.projectedY, current.height)
-
-            val distance = sqrt((mouseX - sx).pow(2) + (mouseY - sy).pow(2))
-
-            if (distance < minDistance) {
-                minDistance = distance
-                closestAtom = point
-            }
-        }
-
-        // Only update if something changed (Performance check)
-        if (current.hoveredPoint != closestAtom) {
-            context.update(current.copy(hoveredPoint = closestAtom))
-        }
-    }
-
-    fun handleClick(event: MouseEvent) {
-        val current = context.state
-        // Ignore click if drag just finished
-        if (current.isDragging && isRealDrag)
-            return
-
-        if (event.clickCount == 2 && current.hoveredPoint != null) {
-            explorerController.switchView(ViewMode.SELECTION)
-        }
-        // Toggle selection if hovering
-        current.hoveredPoint?.let { point ->
-            // Create a new set based on the old one
-            val newSelection = if (current.selectedPoints.contains(point)) {
-                current.selectedPoints - point // Toggle Off
-            } else {
-                current.selectedPoints + point // Toggle On
-            }
-
-            context.update(current.copy(selectedPoints = newSelection))
-
-            explorerController.updateNavButtons()
-        } ?: run {
-            // Clicked empty space -> Clear
-            if (!event.isShiftDown && !event.isShortcutDown) {
-                context.update(current.copy(selectedPoints = emptySet()))
-                explorerController.updateNavButtons()
-            }
-        }
-    }
-    */
