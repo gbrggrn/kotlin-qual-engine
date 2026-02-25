@@ -17,7 +17,7 @@ object DatabaseFactory {
     fun init() {
         val dbFile = File("qualengine.db")
 
-        Database.Companion.connect("jdbc:sqlite:${dbFile.absolutePath}", driver = "org.sqlite.JDBC")
+        Database.connect("jdbc:sqlite:${dbFile.absolutePath}", driver = "org.sqlite.JDBC")
 
         transaction {
             // Check tables exist - otherwise CREATE
@@ -27,10 +27,10 @@ object DatabaseFactory {
         println("Refinery Storage: ONLINE [$dbFile.absolutePath]")
     }
 
-    /**
-     * Helper: Converts a database string like "[0.1, 0.2]" into a DoubleArray.
-     * Uses manual string manipulation which is faster than Regex/JSON for this specific format.
-     */
+    // ===========================================================================================
+    // Helper: Converts a database string like "[0.1, 0.2]" into a DoubleArray.
+    // Uses manual string manipulation which is faster than Regex/JSON for this specific format.
+    // ===========================================================================================
     private fun parseEmbedding(dbString: String): DoubleArray {
         // Clean up brackets if they exist
         val clean = dbString.trim().removeSurrounding("[", "]")
@@ -38,7 +38,6 @@ object DatabaseFactory {
         if (clean.isBlank()) return DoubleArray(0)
 
         // Split by comma and convert
-        // .map { it.toDouble() } creates a List, so we convert to Array at the end
         try {
             return clean.split(",").map { it.trim().toDouble() }.toDoubleArray()
         } catch (e: NumberFormatException) {
@@ -64,7 +63,7 @@ object DatabaseFactory {
         }
     }
 
-    // --- Fetch the top 20 results that are semantically closest to the query vector (a vectorized search query)
+    // Fetch the top 20 results that are semantically closest to the query vector (a vectorized search query) (RAG)
     fun searchParagraphs(queryVector: DoubleArray, topK: Int = 20): List<VectorPoint> {
         val all = getParagraphPoints()
         return all.map { point ->
