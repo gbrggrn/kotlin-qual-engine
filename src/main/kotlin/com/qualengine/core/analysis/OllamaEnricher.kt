@@ -60,7 +60,7 @@ object OllamaEnricher {
         json.put("prompt", prompt)
         json.put("stream", false)
         json.put("options", options)
-        json.put("keep_alive", MODEL_ACTIVE_TIME) // Suggested 5 minutes for additional calls
+        json.put("keep_alive", MODEL_ACTIVE_TIME) // 5 minutes seems to work fine for additional calls
 
         val request = HttpRequest.newBuilder()
             .uri(URI.create(OLLAMA_URL))
@@ -96,7 +96,7 @@ object OllamaEnricher {
 
 // Test runner for OllamaEnricher
 fun main() {
-    println("Testing Contextual Proxy...")
+    println("[Enricher Test] Testing Contextual Proxy...")
 
     val context = "The legacy SQL database suffers from connection pool exhaustion during peak hours."
     val vagueTarget = "It often crashes because of this, causing the frontend to freeze."

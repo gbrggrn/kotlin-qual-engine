@@ -73,7 +73,7 @@ object SemanticCompressor {
             // Return if blank
             if (clean.isBlank())
                 return@filter false
-            // Make all everything lowercase
+            // Make everything lowercase
             val lower = clean.lowercase()
             // RULE 1: Remove all pre-defined stop-words
             if (STOP_WORDS.contains(lower))
