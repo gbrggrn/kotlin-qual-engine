@@ -363,6 +363,7 @@ class ExplorerController {
             if (currentCount >= targetClusters) break
             if (currentCount < maxClustersFound && maxClustersFound >= 2) break // Peak detected
 
+            // Increment epsilon as we iterate until the "optimal spread" is found
             epsilon += 0.02
         }
 
