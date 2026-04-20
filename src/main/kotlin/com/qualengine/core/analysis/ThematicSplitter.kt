@@ -15,10 +15,11 @@ object ThematicSplitter {
     private const val LOWEST_SIMILARITY_COSINE_ANGLE = 1.0
     private const val MAX_RAW_TEXT_LENGTH = 3000;
     private val SENTENCE_PATTERN = Regex("(?<=[.!?])\\s+")
+    private const val MIN_SENTENCE_LENGTH = 3
 
     fun attemptSplit(block: TextBlock, docId: String): List<TextBlock> {
         // === Split into sentences
-        val sentences = sentenceSplitter.split(docId, "temp_split_id", block.rawText)
+        val sentences = splitBlock(block)
 
         // No split if there are too few sentences
         if (sentences.size < MIN_SENTENCES_PER_CHUNK)
@@ -26,7 +27,7 @@ object ThematicSplitter {
 
         // === Vectorize sentences (memory heavy)
         val vectors = sentences.map { s ->
-            ollamaClient.getVector(s.content, SENTENCE_TOKEN_LIMIT)
+            ollamaClient.getVector(s.rawText, SENTENCE_TOKEN_LIMIT)
         }
 
         // === Scan for potential split-points
@@ -57,11 +58,11 @@ object ThematicSplitter {
 
         if (splitIndex != -1 && lowestSimilarity < threshold) {
             // Sentences 0 to splitIndex
-            val textA = sentences.slice(0..splitIndex).joinToString(" ") { it.content }
+            val textA = sentences.slice(0..splitIndex).joinToString(" ") { it.rawText }
 
             // Sentences splitIndex + 1 to end
-            val overlap = sentences[splitIndex].content
-            val textB = overlap + " " + sentences.slice(splitIndex + 1 until sentences.size).joinToString(" ") { it.content }
+            val overlap = sentences[splitIndex].rawText
+            val textB = overlap + " " + sentences.slice(splitIndex + 1 until sentences.size).joinToString(" ") { it.rawText }
 
             // Return the split TextBlock in two parts
             return listOf(
@@ -73,7 +74,18 @@ object ThematicSplitter {
         return listOf(block)
     }
 
-    fun splitBlock(block: TextBlock) {
+    fun splitBlock(block: TextBlock): List<TextBlock> {
+        val rawSentences = block.rawText.split(SENTENCE_PATTERN)
 
+        val cleanSentences = mutableListOf<TextBlock>()
+
+        for (s in rawSentences) {
+            val cleanText = s.trim()
+
+            if (cleanText.length > MIN_SENTENCE_LENGTH) {
+                cleanSentences.add(TextBlock(cleanText))
+            }
+        }
+        return cleanSentences
     }
 }
