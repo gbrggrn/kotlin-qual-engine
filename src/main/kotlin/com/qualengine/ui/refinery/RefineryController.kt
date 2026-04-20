@@ -139,8 +139,7 @@ class RefineryController {
                     refinery.ingestFile(job.file) { progress, status ->
 
                         // TODO: Throttle UI updates?
-                        // If this runs 1000 times/sec, it can freeze the UI.
-                        // For paragraphs (1 per sec), standard runLater is fine.
+                        // If this runs 1000 times/sec, it can freeze the UI (I know from experience)
                         Platform.runLater {
                             job.setStatus(status)
                             job.setProgress(progress)
