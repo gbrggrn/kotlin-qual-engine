@@ -7,7 +7,6 @@ object ThematicSplitter {
     // Dependencies
     private val ollamaClient = DependencyRegistry.ollamaClient
     private val vectorMath = DependencyRegistry.vectorMath
-    private val sentenceSplitter = DependencyRegistry.sentenceSplitter
 
     // Settings
     private const val MIN_SENTENCES_PER_CHUNK = 4
@@ -15,6 +14,7 @@ object ThematicSplitter {
     private const val SPLIT_INDEX = -1
     private const val LOWEST_SIMILARITY_COSINE_ANGLE = 1.0
     private const val MAX_RAW_TEXT_LENGTH = 3000;
+    private val SENTENCE_PATTERN = Regex("(?<=[.!?])\\s+")
 
     fun attemptSplit(block: TextBlock, docId: String): List<TextBlock> {
         // === Split into sentences
@@ -71,5 +71,9 @@ object ThematicSplitter {
         }
         // Failed to find a proper "fault line" by which to split the block
         return listOf(block)
+    }
+
+    fun splitBlock(block: TextBlock) {
+
     }
 }
