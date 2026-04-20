@@ -33,7 +33,7 @@ class InputPipeline(
     private var dragStartY = 0.0
 
     // =================================================================
-    // ZOOM (The Camera Logic)
+    // ZOOM (Camera Logic)
     // =================================================================
     fun handleScroll(event: ScrollEvent) {
         val currentCamera = context.state.camera
@@ -58,7 +58,7 @@ class InputPipeline(
         val newCamX = mouseWorld.x - (screenOffsetX / newZoom)
         val newCamY = mouseWorld.y - (screenOffsetY / newZoom)
 
-        // === Commit
+        // === Commit to state
         val newCamera = currentCamera.copy(x = newCamX, y = newCamY, zoom = newZoom)
         context.update(context.state.copy(camera = newCamera))
         controller.requestRender() // Helper in controller to trigger render
