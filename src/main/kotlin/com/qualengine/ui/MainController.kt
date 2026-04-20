@@ -34,6 +34,7 @@ class MainController {
         setContent(refineryView!!)
     }
 
+    // This method is unused as of now
     @FXML
     fun navToExplorer() {
         updateActiveButton(btnExplorer)
